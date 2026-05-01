@@ -1,17 +1,19 @@
 // Core type definitions for Minesweeper
 
-export enum CellState {
-  Hidden = 'hidden',
-  Revealed = 'revealed',
-  Flagged = 'flagged',
-}
+export const CellState = {
+  Hidden: 'hidden',
+  Revealed: 'revealed',
+  Flagged: 'flagged',
+} as const;
+export type CellState = (typeof CellState)[keyof typeof CellState];
 
-export enum GameStatus {
-  Idle = 'idle',       // Before first move
-  Playing = 'playing', // Active game
-  Won = 'won',         // All safe cells revealed
-  Lost = 'lost',       // Hit a mine
-}
+export const GameStatus = {
+  Idle: 'idle',
+  Playing: 'playing',
+  Won: 'won',
+  Lost: 'lost',
+} as const;
+export type GameStatus = (typeof GameStatus)[keyof typeof GameStatus];
 
 export interface Cell {
   row: number;
