@@ -1,11 +1,13 @@
 import {
-  Cell,
   CellState,
-  Direction,
   DIRECTION_DELTAS,
+  GameStatus,
+} from '../types';
+import type {
+  Cell,
+  Direction,
   GameConfig,
   GameState,
-  GameStatus,
 } from '../types';
 
 export class GameEngine {

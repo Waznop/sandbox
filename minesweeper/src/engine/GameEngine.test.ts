@@ -216,7 +216,8 @@ describe('GameEngine', () => {
 
       // Click center to place mines (safe zone around center)
       engine.reveal(2, 2);
-      expect(engine.getState().status).toBe(GameStatus.Playing);
+      // On a small board with few mines, flood-fill may win immediately
+      expect([GameStatus.Playing, GameStatus.Won]).toContain(engine.getState().status);
 
       // Reveal all remaining safe cells
       for (let r = 0; r < medConfig.rows; r++) {
@@ -411,9 +412,10 @@ describe('GameEngine', () => {
     it('handles corner click for safe zone on small board', () => {
       const tiny = { rows: 3, cols: 3, mines: 1 };
       const engine = new GameEngine(tiny);
-      // Click top-left corner — safe zone is just (0,0),(0,1),(1,0),(1,1)
+      // Click top-left corner — safe zone covers corner + neighbors
       engine.reveal(0, 0);
-      expect(engine.getState().status).toBe(GameStatus.Playing);
+      // May win immediately if flood-fill reveals all safe cells
+      expect([GameStatus.Playing, GameStatus.Won]).toContain(engine.getState().status);
 
       // The mine should NOT be in the safe zone
       for (let dr = 0; dr <= 1; dr++) {
