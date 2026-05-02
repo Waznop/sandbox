@@ -148,17 +148,16 @@ export class Renderer {
     this.timerEl.textContent = String(state.elapsedSeconds);
 
     // Rebuild board if dimensions changed
-    const existingRows = this.boardEl.children.length;
-    const existingCols = existingRows > 0 ? (this.boardEl.children[0] as HTMLElement).children.length : 0;
-
-    if (existingRows !== rows || existingCols !== cols) {
+    const expectedCells = rows * cols;
+    if (this.boardEl.children.length !== expectedCells) {
       this.buildBoard(rows, cols);
     }
 
-    // Update cells
+    // Update cells (board uses flat list, not 2D nested structure)
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < cols; c++) {
-        const cellEl = (this.boardEl.children[r] as HTMLElement).children[c] as HTMLElement;
+        const index = r * cols + c;
+        const cellEl = this.boardEl.children[index] as HTMLElement;
         const cellData = state.grid[r][c];
         this.updateCell(cellEl, cellData);
       }
@@ -167,7 +166,8 @@ export class Renderer {
     // Update cursor highlight
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < cols; c++) {
-        const cellEl = (this.boardEl.children[r] as HTMLElement).children[c] as HTMLElement;
+        const index = r * cols + c;
+        const cellEl = this.boardEl.children[index] as HTMLElement;
         if (r === state.playerPos.row && c === state.playerPos.col) {
           cellEl.classList.add('cursor');
         } else {
