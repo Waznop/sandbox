@@ -69,3 +69,106 @@ export const PRESET_CONFIGS: Record<string, GameConfig> = {
   medium: { rows: 12, cols: 10, mines: 30 },
   hard:   { rows: 14, cols: 12, mines: 50 },
 };
+
+// ─── Gamemode System ───────────────────────────────────────────────────────
+
+export const Gamemode = {
+  Classic: 'classic',
+  Arcane: 'arcane',
+  Shadow: 'shadow',
+  Resource: 'resource',
+  Chain: 'chain',
+} as const;
+export type Gamemode = (typeof Gamemode)[keyof typeof Gamemode];
+
+export interface GamemodeConfig {
+  mode: Gamemode;
+  // Arcane
+  arcaneDeckSize?: number;
+  arcaneHandLimit?: number;
+  // Shadow
+  shadowFogRadius?: number;
+  shadowStealthCharges?: number;
+  // Resource
+  resourceStartEnergy?: number;
+  resourceRevealCost?: number;
+  resourceFlagCost?: number;
+  resourceEnergyCellValue?: number;
+  // Chain
+  chainComboTimeout?: number;
+  chainAutoFlagThreshold?: number;
+  chainChainRevealThreshold?: number;
+}
+
+// ─── Arcane Card System ────────────────────────────────────────────────────
+
+export const CardRarity = {
+  Common: 'common',
+  Rare: 'rare',
+  Legendary: 'legendary',
+} as const;
+export type CardRarity = (typeof CardRarity)[keyof typeof CardRarity];
+
+export const CardEffect = {
+  Shield: 'shield',
+  Detonate: 'detonate',
+  Scanner: 'scanner',
+  Freeze: 'freeze',
+  ChainReveal: 'chainReveal',
+  Magnet: 'magnet',
+  TimeWarp: 'timeWarp',
+  Teleport: 'teleport',
+} as const;
+export type CardEffect = (typeof CardEffect)[keyof typeof CardEffect];
+
+export interface Card {
+  id: string;
+  name: string;
+  description: string;
+  effect: CardEffect;
+  rarity: CardRarity;
+}
+
+// ─── Extended Types ────────────────────────────────────────────────────────
+
+export interface Cell {
+  row: number;
+  col: number;
+  isMine: boolean;
+  adjacentMines: number;
+  state: CellState;
+  // Gamemode-specific extensions
+  isEnergyCell?: boolean;
+  isShadowMine?: boolean;
+  shielded?: boolean;
+  frozen?: boolean;
+}
+
+export interface GameState {
+  grid: Cell[][];
+  status: GameStatus;
+  startTime: number | null;
+  endTime: number | null;
+  elapsedSeconds: number;
+  flagsPlaced: number;
+  cellsRevealed: number;
+  totalSafeCells: number;
+  playerPos: { row: number; col: number };
+  // Gamemode extensions
+  gamemode: Gamemode;
+  // Arcane
+  arcaneDeck?: Card[];
+  arcaneHand?: Card[];
+  arcanePlayedCards?: Card[];
+  arcanePendingCard?: Card | null;
+  // Shadow
+  shadowFogMask?: boolean[][];
+  shadowStealthCharges?: number;
+  // Resource
+  resourceEnergy?: number;
+  resourceEnergyCellsRevealed?: number;
+  // Chain
+  chainCombo?: number;
+  chainLastRevealTime?: number;
+  chainChainCellsRevealed?: number;
+}

@@ -3,7 +3,7 @@
  */
 import { describe, it, expect, beforeEach } from 'vitest';
 import { Renderer } from './renderer';
-import { CellState, GameStatus, PRESET_CONFIGS } from './types';
+import { CellState, PRESET_CONFIGS } from './types';
 import { GameEngine } from './engine/GameEngine';
 
 describe('Renderer', () => {
@@ -42,7 +42,7 @@ describe('Renderer', () => {
 
     it('sets correct grid dimensions', () => {
       renderer.render(engine.getState());
-      const board = container.querySelector('.board');
+      const board = container.querySelector('.board') as HTMLElement | null;
       const style = board?.style;
       expect(style?.gridTemplateColumns).toBe('repeat(8, 32px)');
       expect(style?.gridTemplateRows).toBe('repeat(8, 32px)');
@@ -85,7 +85,7 @@ describe('Renderer', () => {
       engine.moveCursor('right');
       renderer.render(engine.getState());
 
-      const cursor = container.querySelector('.cell.cursor');
+      const cursor = container.querySelector('.cell.cursor') as HTMLElement | null;
       expect(cursor).not.toBeNull();
       expect(cursor?.dataset.row).toBe('0');
       expect(cursor?.dataset.col).toBe('2');

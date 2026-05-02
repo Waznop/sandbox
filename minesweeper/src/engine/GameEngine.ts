@@ -2,13 +2,16 @@ import {
   CellState,
   DIRECTION_DELTAS,
   GameStatus,
+  Gamemode,
 } from '../types';
 import type {
   Cell,
   Direction,
   GameConfig,
   GameState,
+  GamemodeConfig,
 } from '../types';
+import type { IGamemode } from '../gamemodes/IGamemode';
 
 export class GameEngine {
   private config: GameConfig;
@@ -21,8 +24,13 @@ export class GameEngine {
   private totalSafeCells: number;
   private playerPos: { row: number; col: number };
 
-  constructor(config: GameConfig) {
+  // ─── Gamemode Support ──────────────────────────────────────────────────
+  private gamemode: IGamemode | null = null;
+  private gamemodeConfig: GamemodeConfig = { mode: Gamemode.Classic };
+
+  constructor(config: GameConfig, gamemodeConfig?: GamemodeConfig) {
     this.config = config;
+    this.gamemodeConfig = gamemodeConfig ?? { mode: Gamemode.Classic };
     this.startTime = null;
     this.endTime = null;
     this.flagsPlaced = 0;
@@ -153,19 +161,35 @@ export class GameEngine {
       this.flagsPlaced--;
     }
 
+    // ─── Gamemode hook: apply effects BEFORE mine check ──────────────────
+    // This allows Shield/Freeze cards to protect the cell before engine
+    // checks if it's a mine.
+    if (this.gamemode) {
+      this.gamemode.onReveal(row, col, cell, this.grid);
+    }
+
     if (cell.isMine) {
-      cell.state = CellState.Revealed;
-      this.status = GameStatus.Lost;
-      this.endTime = Date.now();
-      // Reveal all mines
-      for (let r = 0; r < this.config.rows; r++) {
-        for (let c = 0; c < this.config.cols; c++) {
-          if (this.grid[r][c].isMine && this.grid[r][c].state === CellState.Hidden) {
-            this.grid[r][c].state = CellState.Revealed;
+      // Check for gamemode protection (Shield / Freeze)
+      if (cell.shielded || cell.frozen) {
+        cell.shielded = false;
+        cell.frozen = false;
+        cell.isMine = false; // Remove the mine
+        cell.state = CellState.Revealed;
+        this.cellsRevealed++;
+      } else {
+        cell.state = CellState.Revealed;
+        this.status = GameStatus.Lost;
+        this.endTime = Date.now();
+        // Reveal all mines
+        for (let r = 0; r < this.config.rows; r++) {
+          for (let c = 0; c < this.config.cols; c++) {
+            if (this.grid[r][c].isMine && this.grid[r][c].state === CellState.Hidden) {
+              this.grid[r][c].state = CellState.Revealed;
+            }
           }
         }
+        return;
       }
-      return;
     }
 
     // Non-mine cell
@@ -227,6 +251,11 @@ export class GameEngine {
       cell.state = CellState.Hidden;
       this.flagsPlaced--;
     }
+
+    // Gamemode hook for flag
+    if (this.gamemode) {
+      this.gamemode.onFlag(row, col, cell);
+    }
   }
 
   moveCursor(direction: Direction): void {
@@ -246,6 +275,12 @@ export class GameEngine {
     this.cellsRevealed = 0;
     this.totalSafeCells = this.config.rows * this.config.cols - this.config.mines;
     this.playerPos = { row: 0, col: 0 };
+
+    // Initialize gamemode
+    if (this.gamemode) {
+      this.gamemode.onNewGame(this.config);
+      this.gamemode.init(this.grid);
+    }
   }
 
   getState(): GameState {
@@ -255,7 +290,8 @@ export class GameEngine {
       const end = this.endTime ?? now;
       elapsedSeconds = Math.floor((end - this.startTime) / 1000);
     }
-    return {
+
+    const state: GameState = {
       grid: this.grid,
       status: this.status,
       startTime: this.startTime,
@@ -265,10 +301,28 @@ export class GameEngine {
       cellsRevealed: this.cellsRevealed,
       totalSafeCells: this.totalSafeCells,
       playerPos: { ...this.playerPos },
+      gamemode: this.gamemodeConfig.mode,
     };
+
+    // Include gamemode-specific state
+    if (this.gamemode) {
+      Object.assign(state, this.gamemode.getState());
+    }
+
+    return state;
   }
 
   getConfig(): GameConfig {
     return { ...this.config };
+  }
+
+  // ─── Gamemode Accessors ────────────────────────────────────────────────
+
+  setGamemode(gamemode: IGamemode): void {
+    this.gamemode = gamemode;
+  }
+
+  getGamemode(): IGamemode | null {
+    return this.gamemode;
   }
 }
