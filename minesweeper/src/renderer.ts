@@ -325,8 +325,8 @@ export class Renderer {
     this.gamemodeInfoEl.textContent = modeNames[state.gamemode] || 'Classic';
 
     const instructions: Record<string, string> = {
-      [Gamemode.Classic]: 'Reveal all safe cells. Numbers show adjacent mines. Right-click to flag.',
-      [Gamemode.Arcane]: 'Reveal cells to draw cards! Use spells from your hand: Shield, Detonate, Scanner, Chain, Freeze, Magnet, Time Warp, Teleport.',
+      [Gamemode.Classic]: 'Tap to reveal. Long-press to flag. Numbers show adjacent mines.',
+      [Gamemode.Arcane]: 'Tap to reveal and draw cards! Use spells from your hand: Shield, Detonate, Scanner, Chain, Freeze, Magnet, Time Warp, Teleport.',
       [Gamemode.Shadow]: 'Only cells near revealed tiles are visible. You have 3 stealth charges for safe reveals. Uncover the whole board to win.',
       [Gamemode.Resource]: 'Reveals cost 1 energy, flags cost 2. ⚡ Energy cells restore 2 energy. Don\'t run out!',
       [Gamemode.Chain]: 'Quick successive reveals build combos. x5 auto-flags, x10 chain-reveals, x15 blasts a 3×3 area.',
@@ -525,19 +525,74 @@ export class Renderer {
   }
 
   onCellClick(handler: (row: number, col: number) => void): void {
-    this.boardEl.addEventListener('click', (e) => {
+    const handleTap = (e: Event) => {
       const target = e.target as HTMLElement;
       if (!target.dataset.row || !target.dataset.col) return;
       handler(Number(target.dataset.row), Number(target.dataset.col));
+    };
+
+    // Support both click and touch events
+    this.boardEl.addEventListener('click', handleTap);
+    this.boardEl.addEventListener('touchend', (e) => {
+      // Only handle single taps (not long presses)
+      if (e.changedTouches.length === 1) {
+        const touch = e.changedTouches[0];
+        const target = document.elementFromPoint(touch.clientX, touch.clientY) as HTMLElement;
+        if (target && target.dataset.row && target.dataset.col) {
+          e.preventDefault();
+          handleTap(e);
+        }
+      }
     });
   }
 
   onCellRightClick(handler: (row: number, col: number) => void): void {
+    // Desktop: right-click
     this.boardEl.addEventListener('contextmenu', (e) => {
       e.preventDefault();
       const target = e.target as HTMLElement;
       if (!target.dataset.row || !target.dataset.col) return;
       handler(Number(target.dataset.row), Number(target.dataset.col));
+    });
+
+    // Mobile: long-press (500ms)
+    let pressTimer: ReturnType<typeof setTimeout> | null = null;
+    let pressStart: { row: number; col: number } | null = null;
+
+    this.boardEl.addEventListener('touchstart', (e) => {
+      if (e.changedTouches.length === 1) {
+        const touch = e.changedTouches[0];
+        const target = document.elementFromPoint(touch.clientX, touch.clientY) as HTMLElement;
+        if (target && target.dataset.row && target.dataset.col) {
+          pressStart = {
+            row: Number(target.dataset.row),
+            col: Number(target.dataset.col),
+          };
+          pressTimer = setTimeout(() => {
+            if (pressStart) {
+              handler(pressStart.row, pressStart.col);
+              pressStart = null;
+            }
+          }, 500);
+        }
+      }
+    }, { passive: true });
+
+    this.boardEl.addEventListener('touchend', () => {
+      if (pressTimer) {
+        clearTimeout(pressTimer);
+        pressTimer = null;
+        pressStart = null;
+      }
+    });
+
+    this.boardEl.addEventListener('touchmove', () => {
+      // Cancel long-press if user moves finger
+      if (pressTimer) {
+        clearTimeout(pressTimer);
+        pressTimer = null;
+        pressStart = null;
+      }
     });
   }
 }

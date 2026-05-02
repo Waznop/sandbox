@@ -235,6 +235,22 @@ body {
   #app { padding: 12px; gap: 8px; }
 }
 
+/* Mobile touch optimization */
+@media (hover: none) and (pointer: coarse) {
+  .cell {
+    min-width: 44px;
+    min-height: 44px;
+    font-size: 20px;
+  }
+  .cell.hidden {
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+  .cell.hidden:active {
+    background-color: #2a3a5e;
+  }
+}
+
 /* ─── Gamemode UI ───────────────────────────────────────────────────────── */
 
 .gamemode-info {
