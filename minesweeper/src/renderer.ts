@@ -1,5 +1,5 @@
-import { CellState, GameStatus } from './types';
-import type { Cell, GameState, GameConfig } from './types';
+import { CellState, GameStatus, Gamemode } from './types';
+import type { Cell, GameState, GameConfig, Card } from './types';
 
 const CELL_SIZE = 32;
 
@@ -48,7 +48,13 @@ export class Renderer {
   private timerEl: HTMLElement;
   private faceBtn: HTMLElement;
   private difficultySelector!: HTMLSelectElement;
+  private gamemodeSelector!: HTMLSelectElement;
   private scoresPanel!: HTMLElement;
+  private gamemodeInfoEl!: HTMLElement;
+  private arcaneHandEl!: HTMLElement;
+  private resourceEnergyEl!: HTMLElement;
+  private chainComboEl!: HTMLElement;
+  private resourceEnergyBarEl!: HTMLElement;
 
   constructor(container: HTMLElement) {
     container.innerHTML = '';
@@ -76,6 +82,31 @@ export class Renderer {
     diffWrap.appendChild(diffLabel);
     diffWrap.appendChild(this.difficultySelector);
 
+    // Gamemode selector
+    const gmWrap = document.createElement('div');
+    gmWrap.className = 'difficulty-selector';
+    const gmLabel = document.createElement('label');
+    gmLabel.textContent = 'Mode:';
+    gmLabel.htmlFor = 'gamemode';
+    this.gamemodeSelector = document.createElement('select');
+    this.gamemodeSelector.id = 'gamemode';
+    const gamemodeOptions = [
+      { value: Gamemode.Classic, label: 'Classic' },
+      { value: Gamemode.Arcane, label: '🔮 Arcane' },
+      { value: Gamemode.Shadow, label: '🌑 Shadow' },
+      { value: Gamemode.Resource, label: '⚡ Resource' },
+      { value: Gamemode.Chain, label: '🔥 Chain' },
+    ];
+    for (const opt of gamemodeOptions) {
+      const option = document.createElement('option');
+      option.value = opt.value;
+      option.textContent = opt.label;
+      if (opt.value === Gamemode.Classic) option.selected = true;
+      this.gamemodeSelector.appendChild(option);
+    }
+    gmWrap.appendChild(gmLabel);
+    gmWrap.appendChild(this.gamemodeSelector);
+
     // Header bar: mine count, face, timer
     const header = document.createElement('div');
     header.className = 'game-header';
@@ -100,6 +131,33 @@ export class Renderer {
     this.statusEl = document.createElement('div');
     this.statusEl.className = 'game-status';
 
+    // Gamemode info bar
+    this.gamemodeInfoEl = document.createElement('div');
+    this.gamemodeInfoEl.className = 'gamemode-info';
+
+    // Arcane hand display
+    this.arcaneHandEl = document.createElement('div');
+    this.arcaneHandEl.className = 'arcane-hand';
+    this.arcaneHandEl.style.display = 'none';
+
+    // Resource energy display
+    this.resourceEnergyEl = document.createElement('div');
+    this.resourceEnergyEl.className = 'resource-energy';
+    this.resourceEnergyEl.style.display = 'none';
+    const energyLabel = document.createElement('span');
+    energyLabel.className = 'energy-label';
+    energyLabel.textContent = '⚡';
+    this.resourceEnergyEl.appendChild(energyLabel);
+    this.resourceEnergyBarEl = document.createElement('div');
+    this.resourceEnergyBarEl.className = 'energy-bar';
+    this.resourceEnergyBarEl.style.width = '100%';
+    this.resourceEnergyEl.appendChild(this.resourceEnergyBarEl);
+
+    // Chain combo display
+    this.chainComboEl = document.createElement('div');
+    this.chainComboEl.className = 'chain-combo';
+    this.chainComboEl.style.display = 'none';
+
     this.boardEl = document.createElement('div');
     this.boardEl.className = 'board';
 
@@ -110,8 +168,13 @@ export class Renderer {
 
     container.appendChild(title);
     container.appendChild(diffWrap);
+    container.appendChild(gmWrap);
     container.appendChild(header);
     container.appendChild(this.statusEl);
+    container.appendChild(this.gamemodeInfoEl);
+    container.appendChild(this.arcaneHandEl);
+    container.appendChild(this.resourceEnergyEl);
+    container.appendChild(this.chainComboEl);
     container.appendChild(this.boardEl);
     container.appendChild(this.scoresPanel);
   }
@@ -122,6 +185,10 @@ export class Renderer {
 
   getDifficultySelector(): HTMLSelectElement {
     return this.difficultySelector;
+  }
+
+  getGamemodeSelector(): HTMLSelectElement {
+    return this.gamemodeSelector;
   }
 
   render(state: GameState): void {
@@ -147,6 +214,16 @@ export class Renderer {
     this.mineCountEl.textContent = String(Math.max(0, totalMines - state.flagsPlaced));
     this.timerEl.textContent = String(state.elapsedSeconds);
 
+    // ─── Gamemode Info ───────────────────────────────────────────────────
+    this.renderGamemodeInfo(state);
+
+    // ─── Gamemode-Specific UI ────────────────────────────────────────────
+    this.renderArcaneHand(state);
+    this.renderResourceEnergy(state);
+    this.renderChainCombo(state);
+    this.renderShadowFog(state);
+
+    // ─── Board ───────────────────────────────────────────────────────────
     // Rebuild board if dimensions changed
     const expectedCells = rows * cols;
     if (this.boardEl.children.length !== expectedCells) {
@@ -159,7 +236,7 @@ export class Renderer {
         const index = r * cols + c;
         const cellEl = this.boardEl.children[index] as HTMLElement;
         const cellData = state.grid[r][c];
-        this.updateCell(cellEl, cellData);
+        this.updateCell(cellEl, cellData, state);
       }
     }
 
@@ -198,7 +275,7 @@ export class Renderer {
     }
   }
 
-  private updateCell(el: HTMLElement, cell: Cell): void {
+  private updateCell(el: HTMLElement, cell: Cell, _state: GameState): void {
     el.classList.remove('hidden', 'revealed', 'flagged', 'mine', 'cursor');
 
     if (cell.state === CellState.Hidden) {
@@ -220,6 +297,132 @@ export class Renderer {
         } else {
           el.textContent = '';
           el.style.color = '';
+        }
+        // Show energy cell indicator
+        if (cell.isEnergyCell) {
+          el.textContent = '⚡';
+        }
+      }
+    }
+  }
+
+  // ─── Gamemode Info ─────────────────────────────────────────────────────
+
+  private renderGamemodeInfo(state: GameState): void {
+    const modeNames: Record<string, string> = {
+      [Gamemode.Classic]: 'Classic Minesweeper',
+      [Gamemode.Arcane]: '🔮 Arcane Minesweeper',
+      [Gamemode.Shadow]: '🌑 Shadow Minesweeper',
+      [Gamemode.Resource]: '⚡ Resource Minesweeper',
+      [Gamemode.Chain]: '🔥 Chain Minesweeper',
+    };
+    this.gamemodeInfoEl.textContent = modeNames[state.gamemode] || 'Classic';
+  }
+
+  // ─── Arcane: Card Hand ─────────────────────────────────────────────────
+
+  private renderArcaneHand(state: GameState): void {
+    if (state.gamemode !== Gamemode.Arcane) {
+      this.arcaneHandEl.style.display = 'none';
+      return;
+    }
+    this.arcaneHandEl.style.display = 'block';
+    this.arcaneHandEl.innerHTML = '';
+
+    const hand = (state as GameState & { arcaneHand?: Card[] }).arcaneHand;
+    if (!hand || hand.length === 0) {
+      this.arcaneHandEl.textContent = 'No cards';
+      return;
+    }
+
+    for (const card of hand) {
+      const cardEl = document.createElement('div');
+      cardEl.className = 'arcane-card';
+      const rarityColors: Record<string, string> = {
+        common: '#95a5a6',
+        rare: '#3498db',
+        legendary: '#f1c40f',
+      };
+      cardEl.style.borderLeft = `3px solid ${rarityColors[card.rarity] || '#95a5a6'}`;
+      cardEl.textContent = card.name;
+      cardEl.title = `${card.name}: ${card.description}`;
+      this.arcaneHandEl.appendChild(cardEl);
+    }
+  }
+
+  // ─── Resource: Energy Bar ──────────────────────────────────────────────
+
+  private renderResourceEnergy(state: GameState): void {
+    if (state.gamemode !== Gamemode.Resource) {
+      this.resourceEnergyEl.style.display = 'none';
+      return;
+    }
+    this.resourceEnergyEl.style.display = 'flex';
+
+    const energy = (state as GameState & { resourceEnergy?: number }).resourceEnergy ?? 10;
+    const maxEnergy = 20;
+    const pct = Math.max(0, Math.min(100, (energy / maxEnergy) * 100));
+    this.resourceEnergyBarEl.style.width = `${pct}%`;
+
+    const energyLabel = this.resourceEnergyEl.querySelector('.energy-label') as HTMLElement;
+    energyLabel.textContent = `⚡ ${energy}`;
+
+    // Color based on energy level
+    if (energy <= 2) {
+      this.resourceEnergyBarEl.style.background = '#e74c3c';
+    } else if (energy <= 5) {
+      this.resourceEnergyBarEl.style.background = '#f39c12';
+    } else {
+      this.resourceEnergyBarEl.style.background = '#27ae60';
+    }
+  }
+
+  // ─── Chain: Combo Meter ────────────────────────────────────────────────
+
+  private renderChainCombo(state: GameState): void {
+    if (state.gamemode !== Gamemode.Chain) {
+      this.chainComboEl.style.display = 'none';
+      return;
+    }
+    this.chainComboEl.style.display = 'block';
+
+    const combo = (state as GameState & { chainCombo?: number }).chainCombo ?? 0;
+    if (combo === 0) {
+      this.chainComboEl.textContent = '';
+      return;
+    }
+
+    this.chainComboEl.innerHTML = `🔥 Combo x${combo}`;
+    const multiplier = combo >= 15 ? '🌟 BLAST!' : combo >= 10 ? '⛓ Chain!' : combo >= 5 ? '🧲 Flag!' : '';
+    if (multiplier) {
+      this.chainComboEl.innerHTML += ` <span class="combo-bonus">${multiplier}</span>`;
+    }
+  }
+
+  // ─── Shadow: Fog Overlay ───────────────────────────────────────────────
+
+  private renderShadowFog(state: GameState): void {
+    if (state.gamemode !== Gamemode.Shadow) return;
+
+    const fogMask = (state as GameState & { shadowFogMask?: boolean[][] }).shadowFogMask;
+    if (!fogMask) return;
+
+    const rows = state.grid.length;
+    const cols = state.grid[0].length;
+
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const index = r * cols + c;
+        const cellEl = this.boardEl.children[index] as HTMLElement;
+        const cellData = state.grid[r][c];
+
+        if (!fogMask[r]?.[c] && cellData.state === CellState.Hidden) {
+          cellEl.classList.add('fog-hidden');
+          cellEl.textContent = '?';
+          cellEl.style.opacity = '0.3';
+        } else {
+          cellEl.classList.remove('fog-hidden');
+          cellEl.style.opacity = '';
         }
       }
     }

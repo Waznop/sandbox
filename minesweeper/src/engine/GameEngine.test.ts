@@ -158,7 +158,9 @@ describe('GameEngine', () => {
 
       // Click center to place mines with safe zone
       engine.reveal(5, 5);
-      expect(engine.getState().status).toBe(GameStatus.Playing);
+      const status = engine.getState().status;
+      // Flood-fill may reveal all safe cells on small boards with few mines
+      expect([GameStatus.Playing, GameStatus.Won]).toContain(status);
 
       // If the clicked cell has adjacentMines === 0, flood-fill should have happened
       if (engine.getState().grid[5][5].adjacentMines === 0) {

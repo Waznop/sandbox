@@ -234,3 +234,119 @@ body {
   .face-btn { font-size: 24px; width: 36px; height: 36px; }
   #app { padding: 12px; gap: 8px; }
 }
+
+/* ─── Gamemode UI ───────────────────────────────────────────────────────── */
+
+.gamemode-info {
+  font-size: 14px;
+  color: #aaa;
+  text-align: center;
+  min-height: 20px;
+  font-style: italic;
+}
+
+/* Arcane card hand */
+.arcane-hand {
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+  flex-wrap: wrap;
+  min-height: 32px;
+  padding: 4px 0;
+}
+
+.arcane-card {
+  background: #16213e;
+  border: 1px solid #0f3460;
+  border-radius: 4px;
+  padding: 4px 10px;
+  font-size: 12px;
+  color: #e0e0e0;
+  cursor: pointer;
+  transition: transform 0.1s, background-color 0.15s;
+  max-width: 120px;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.arcane-card:hover {
+  background: #1f2d50;
+  transform: translateY(-2px);
+}
+
+/* Resource energy bar */
+.resource-energy {
+  display: none;
+  align-items: center;
+  gap: 8px;
+  justify-content: center;
+  padding: 4px 0;
+}
+
+.energy-label {
+  font-size: 14px;
+  font-weight: bold;
+  color: #f39c12;
+  min-width: 60px;
+  text-align: right;
+}
+
+.energy-bar {
+  height: 8px;
+  border-radius: 4px;
+  background: #16213e;
+  transition: width 0.3s ease, background 0.3s ease;
+  max-width: 200px;
+}
+
+/* Chain combo meter */
+.chain-combo {
+  display: none;
+  text-align: center;
+  font-size: 16px;
+  font-weight: bold;
+  color: #e94560;
+  min-height: 24px;
+}
+
+.combo-bonus {
+  color: #f1c40f;
+  font-size: 14px;
+  margin-left: 4px;
+}
+
+/* Shadow fog overlay */
+.cell.fog-hidden {
+  opacity: 0.3;
+  background: #0a0a1a;
+  border-color: #0a0a1a;
+}
+
+/* Gamemode selector styling */
+.difficulty-selector {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.difficulty-selector label {
+  font-size: 14px;
+  color: #aaa;
+}
+
+.difficulty-selector select {
+  background: #16213e;
+  color: #e0e0e0;
+  border: 1px solid #0f3460;
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 14px;
+  cursor: pointer;
+  outline: none;
+}
+
+.difficulty-selector select:focus {
+  border-color: #e94560;
+}

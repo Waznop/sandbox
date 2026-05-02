@@ -1,15 +1,53 @@
 import './style.css';
 import { GameEngine } from './engine/GameEngine';
 import { Renderer } from './renderer';
-import { PRESET_CONFIGS, GameStatus } from './types';
+import { PRESET_CONFIGS, GameStatus, Gamemode } from './types';
 import type { Direction } from './types';
+import { ArcaneGamemode, ShadowGamemode, ResourceGamemode, ChainGamemode } from './gamemodes';
 
 const app = document.querySelector<HTMLDivElement>('#app')!;
 
 // Initialize game with easy preset
 let currentDifficulty = 'easy';
+let currentGamemode: Gamemode = Gamemode.Classic;
 let engine = new GameEngine(PRESET_CONFIGS.easy);
 let renderer = new Renderer(app);
+
+function initGamemode(mode: Gamemode): void {
+  const config = PRESET_CONFIGS[currentDifficulty] ?? PRESET_CONFIGS.easy;
+
+  // Create and set gamemode instance
+  let gmInstance: any = null;
+  switch (mode) {
+    case Gamemode.Arcane:
+      gmInstance = new ArcaneGamemode();
+      break;
+    case Gamemode.Shadow:
+      gmInstance = new ShadowGamemode();
+      break;
+    case Gamemode.Resource:
+      gmInstance = new ResourceGamemode();
+      break;
+    case Gamemode.Chain:
+      gmInstance = new ChainGamemode();
+      break;
+  }
+
+  if (gmInstance) {
+    engine.setGamemode(gmInstance);
+  }
+
+  // Reinitialize with new gamemode
+  engine.newGame(config);
+  renderer.render(engine.getState());
+}
+
+// Wire up gamemode selector
+renderer.getGamemodeSelector().addEventListener('change', (e) => {
+  const sel = e.target as HTMLSelectElement;
+  currentGamemode = sel.value as Gamemode;
+  initGamemode(currentGamemode);
+});
 
 // Timer interval
 let timerInterval: ReturnType<typeof setInterval> | null = null;
@@ -87,7 +125,8 @@ renderer.getFaceBtn().addEventListener('click', () => {
 // Difficulty selector
 renderer.getDifficultySelector().addEventListener('change', (e) => {
   const sel = e.target as HTMLSelectElement;
-  newGame(sel.value);
+  currentDifficulty = sel.value;
+  initGamemode(currentGamemode);
 });
 
 // Keyboard input
