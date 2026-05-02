@@ -1,8 +1,10 @@
-name: Deploy to GitHub Pages
+name: Deploy Minesweeper to GitHub Pages
 
 on:
   push:
     branches: [main]
+    paths:
+      - 'minesweeper/**'
   workflow_dispatch:
 
 permissions:
@@ -17,6 +19,9 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: minesweeper
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -26,6 +31,7 @@ jobs:
         with:
           node-version: 20
           cache: npm
+          cache-dependency-path: minesweeper/package-lock.json
 
       - name: Install dependencies
         run: npm ci
@@ -36,7 +42,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: dist
+          path: minesweeper/dist
 
   deploy:
     needs: build
