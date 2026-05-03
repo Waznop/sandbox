@@ -55,7 +55,6 @@ export class Renderer {
   private chainComboEl!: HTMLElement;
   private resourceEnergyBarEl!: HTMLElement;
   private _currentGrid: Cell[][] = [];
-  private _lastLongPressTime = 0;
 
   constructor(container: HTMLElement) {
     container.innerHTML = '';
@@ -538,33 +537,51 @@ export class Renderer {
 
   onCellClick(handler: (row: number, col: number) => void): void {
     const handleTap = (e: Event) => {
-      // Suppress tap/click events within 1s of a long-press (Android fires click after touchend)
-      if (Date.now() - this._lastLongPressTime < 1000) return;
-
       const target = e.target as HTMLElement;
       if (!target.dataset.row || !target.dataset.col) return;
       const row = Number(target.dataset.row);
       const col = Number(target.dataset.col);
 
-      // Skip if cell is already flagged (prevents reveal after long-press flag on mobile)
+      // Skip if cell is already flagged
       const cell = this._currentGrid[row]?.[col];
       if (cell?.state === CellState.Flagged) return;
 
       handler(row, col);
     };
 
-    // Support both click and touch events
+    // Desktop: click
     this.boardEl.addEventListener('click', handleTap);
-    this.boardEl.addEventListener('touchend', (e) => {
-      // Only handle single taps (not long presses)
+
+    // Mobile: record touch start for duration check
+    let touchStartInfo: { row: number; col: number; startTime: number } | null = null;
+
+    this.boardEl.addEventListener('touchstart', (e) => {
       if (e.changedTouches.length === 1) {
         const touch = e.changedTouches[0];
         const target = document.elementFromPoint(touch.clientX, touch.clientY) as HTMLElement;
         if (target && target.dataset.row && target.dataset.col) {
-          e.preventDefault();
-          handleTap(e);
+          touchStartInfo = {
+            row: Number(target.dataset.row),
+            col: Number(target.dataset.col),
+            startTime: Date.now(),
+          };
         }
       }
+    }, { passive: true });
+
+    this.boardEl.addEventListener('touchend', (e) => {
+      if (touchStartInfo && e.changedTouches.length === 1) {
+        const touch = e.changedTouches[0];
+        const target = document.elementFromPoint(touch.clientX, touch.clientY) as HTMLElement;
+        if (target && target.dataset.row && target.dataset.col) {
+          e.preventDefault();
+          // Only reveal if it's a short tap (<=500ms), not a long press
+          if (Date.now() - touchStartInfo.startTime <= 500) {
+            handleTap(e);
+          }
+        }
+      }
+      touchStartInfo = null;
     });
   }
 
@@ -577,45 +594,33 @@ export class Renderer {
       handler(Number(target.dataset.row), Number(target.dataset.col));
     });
 
-    // Mobile: long-press (500ms)
-    let pressTimer: ReturnType<typeof setTimeout> | null = null;
-    let pressStart: { row: number; col: number } | null = null;
+    // Mobile: check duration at touchend (no timer)
+    let touchStartInfo: { row: number; col: number; startTime: number } | null = null;
 
     this.boardEl.addEventListener('touchstart', (e) => {
       if (e.changedTouches.length === 1) {
         const touch = e.changedTouches[0];
         const target = document.elementFromPoint(touch.clientX, touch.clientY) as HTMLElement;
         if (target && target.dataset.row && target.dataset.col) {
-          pressStart = {
+          touchStartInfo = {
             row: Number(target.dataset.row),
             col: Number(target.dataset.col),
+            startTime: Date.now(),
           };
-          pressTimer = setTimeout(() => {
-            if (pressStart) {
-              this._lastLongPressTime = Date.now();
-              handler(pressStart.row, pressStart.col);
-              pressStart = null;
-            }
-          }, 500);
         }
       }
     }, { passive: true });
 
     this.boardEl.addEventListener('touchend', () => {
-      if (pressTimer) {
-        clearTimeout(pressTimer);
-        pressTimer = null;
-        pressStart = null;
+      if (touchStartInfo && Date.now() - touchStartInfo.startTime > 500) {
+        handler(touchStartInfo.row, touchStartInfo.col);
       }
+      touchStartInfo = null;
     });
 
     this.boardEl.addEventListener('touchmove', () => {
       // Cancel long-press if user moves finger
-      if (pressTimer) {
-        clearTimeout(pressTimer);
-        pressTimer = null;
-        pressStart = null;
-      }
+      touchStartInfo = null;
     });
   }
 }
