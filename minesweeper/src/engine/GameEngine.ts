@@ -62,14 +62,21 @@ export class GameEngine {
   placeMines(safeRow: number, safeCol: number): void {
     if (this.status !== GameStatus.Idle) return;
 
-    // Build set of safe zone positions (first-click cell + its 8 neighbors)
-    const safeSet = new Set<string>();
-    for (let dr = -1; dr <= 1; dr++) {
-      for (let dc = -1; dc <= 1; dc++) {
-        const nr = safeRow + dr;
-        const nc = safeCol + dc;
-        if (nr >= 0 && nr < this.config.rows && nc >= 0 && nc < this.config.cols) {
-          safeSet.add(`${nr},${nc}`);
+    let safeSet: Set<string>;
+
+    // Check if gamemode provides custom mine placement
+    if (this.gamemode?.placeMines) {
+      safeSet = this.gamemode.placeMines(safeRow, safeCol, this.grid, this.config);
+    } else {
+      // Default: first-click cell + its 8 neighbors
+      safeSet = new Set<string>();
+      for (let dr = -1; dr <= 1; dr++) {
+        for (let dc = -1; dc <= 1; dc++) {
+          const nr = safeRow + dr;
+          const nc = safeCol + dc;
+          if (nr >= 0 && nr < this.config.rows && nc >= 0 && nc < this.config.cols) {
+            safeSet.add(`${nr},${nc}`);
+          }
         }
       }
     }
@@ -147,8 +154,18 @@ export class GameEngine {
 
   reveal(row: number, col: number): void {
     // On first click (Idle), place mines with safe zone
+    // Must happen BEFORE gamemode handleCellClick so the game is in Playing state
     if (this.status === GameStatus.Idle) {
       this.placeMines(row, col);
+    }
+
+    // Check if gamemode wants to handle this click
+    if (this.gamemode?.handleCellClick) {
+      if (this.gamemode.handleCellClick(row, col, this.grid)) {
+        // Gamemode handled it — check game-over then return
+        this.checkGamemodeGameOver();
+        return;
+      }
     }
 
     if (this.status !== GameStatus.Playing) return;
@@ -235,9 +252,20 @@ export class GameEngine {
       this.status = GameStatus.Won;
       this.endTime = Date.now();
     }
+
+    // Check gamemode-specific game-over
+    this.checkGamemodeGameOver();
   }
 
   toggleFlag(row: number, col: number): void {
+    // Check if gamemode wants to handle right-click
+    if (this.gamemode?.handleRightClick) {
+      if (this.gamemode.handleRightClick(row, col, this.grid)) {
+        this.checkGamemodeGameOver();
+        return;
+      }
+    }
+
     if (this.status !== GameStatus.Playing && this.status !== GameStatus.Idle) return;
 
     const cell = this.grid[row][col];
@@ -254,6 +282,34 @@ export class GameEngine {
     // Gamemode hook for flag
     if (this.gamemode) {
       this.gamemode.onFlag(row, col, cell);
+    }
+
+    // Check gamemode-specific game-over
+    this.checkGamemodeGameOver();
+  }
+
+  /** Check gamemode-specific game-over conditions */
+  private checkGamemodeGameOver(): void {
+    if (this.status !== GameStatus.Playing) return;
+    if (!this.gamemode?.checkGameOver) return;
+
+    const result = this.gamemode.checkGameOver(this.grid);
+    if (result) {
+      if (result.won) {
+        this.status = GameStatus.Won;
+        this.endTime = Date.now();
+      } else if (result.lost) {
+        this.status = GameStatus.Lost;
+        this.endTime = Date.now();
+        // Reveal all mines
+        for (let r = 0; r < this.config.rows; r++) {
+          for (let c = 0; c < this.config.cols; c++) {
+            if (this.grid[r][c].isMine && this.grid[r][c].state === CellState.Hidden) {
+              this.grid[r][c].state = CellState.Revealed;
+            }
+          }
+        }
+      }
     }
   }
 

@@ -371,3 +371,65 @@ body {
 .difficulty-selector select:focus {
   border-color: #e94560;
 }
+
+/* ─── WardMaze Styles ─────────────────────────────────────────────────── */
+
+.wardmaze-moves {
+  display: none;
+  text-align: center;
+  font-size: 16px;
+  font-weight: bold;
+  color: #f1c40f;
+  min-height: 24px;
+}
+
+.cell.wardmaze-player {
+  background-color: #1a3a5c;
+  border: 2px solid #3498db;
+  font-size: 1.4em;
+  z-index: 2;
+  animation: playerPulse 1.5s ease-in-out infinite;
+}
+
+@keyframes playerPulse {
+  0%, 100% { box-shadow: 0 0 4px rgba(52, 152, 219, 0.4); }
+  50% { box-shadow: 0 0 12px rgba(52, 152, 219, 0.8); }
+}
+
+.cell.wardmaze-goal {
+  background-color: #1a3a1a;
+  border: 2px solid #27ae60;
+  font-size: 1.4em;
+  animation: goalPulse 2s ease-in-out infinite;
+}
+
+@keyframes goalPulse {
+  0%, 100% { box-shadow: 0 0 4px rgba(39, 174, 96, 0.3); }
+  50% { box-shadow: 0 0 10px rgba(39, 174, 96, 0.7); }
+}
+
+.cell.wardmaze-ward {
+  background-color: #16213e;
+  border: 2px solid #f39c12;
+  font-size: 1.2em;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.cell.wardmaze-ward:hover {
+  background-color: #1f2d50;
+  transform: scale(1.05);
+}
+
+.cell.wardmaze-selected {
+  outline: 3px solid #e94560;
+  outline-offset: -2px;
+  z-index: 3;
+  box-shadow: 0 0 15px rgba(233, 69, 96, 0.6);
+  animation: selectedPulse 0.8s ease-in-out infinite;
+}
+
+@keyframes selectedPulse {
+  0%, 100% { box-shadow: 0 0 8px rgba(233, 69, 96, 0.4); }
+  50% { box-shadow: 0 0 18px rgba(233, 69, 96, 0.8); }
+}

@@ -21,4 +21,31 @@ export interface IGamemode {
   onNewGame(config: GameConfig): void;
   /** Returns gamemode-specific state to include in GameState */
   getState(): Record<string, unknown>;
+
+  // ─── Optional hooks (gamemodes can implement these) ───────────────────
+
+  /**
+   * Optional: Custom mine placement. If implemented, the engine calls this
+   * instead of its default placeMines on first click.
+   * @returns Set of safe zone keys ("row,col") that should be mine-free.
+   */
+  placeMines?(safeRow: number, safeCol: number, grid: Cell[][], config: GameConfig): Set<string>;
+
+  /**
+   * Optional: Custom cell click handler. If implemented and returns true,
+   * the engine skips the default reveal/flag behavior.
+   */
+  handleCellClick?(row: number, col: number, grid: Cell[][]): boolean;
+
+  /**
+   * Optional: Custom right-click handler. If implemented and returns true,
+   * the engine skips the default flag behavior.
+   */
+  handleRightClick?(row: number, col: number, grid: Cell[][]): boolean;
+
+  /**
+   * Optional: Gamemode-specific game-over check. Called after each action.
+   * Return true to end the game with the given status.
+   */
+  checkGameOver?(grid: Cell[][]): { won: boolean; lost: boolean } | null;
 }

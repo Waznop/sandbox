@@ -54,6 +54,7 @@ export class Renderer {
   private resourceEnergyEl!: HTMLElement;
   private chainComboEl!: HTMLElement;
   private resourceEnergyBarEl!: HTMLElement;
+  private wardMazeMovesEl!: HTMLElement;
   private _currentGrid: Cell[][] = [];
   private _keyboardActive = false;
 
@@ -97,6 +98,7 @@ export class Renderer {
       { value: Gamemode.Shadow, label: '🌑 Shadow' },
       { value: Gamemode.Resource, label: '⚡ Resource' },
       { value: Gamemode.Chain, label: '🔥 Chain' },
+      { value: Gamemode.WardMaze, label: '🗺️ Ward Maze' },
     ];
     for (const opt of gamemodeOptions) {
       const option = document.createElement('option');
@@ -163,6 +165,11 @@ export class Renderer {
     this.chainComboEl.className = 'chain-combo';
     this.chainComboEl.style.display = 'none';
 
+    // WardMaze move counter
+    this.wardMazeMovesEl = document.createElement('div');
+    this.wardMazeMovesEl.className = 'wardmaze-moves';
+    this.wardMazeMovesEl.style.display = 'none';
+
     this.boardEl = document.createElement('div');
     this.boardEl.className = 'board';
 
@@ -181,6 +188,7 @@ export class Renderer {
     container.appendChild(this.arcaneHandEl);
     container.appendChild(this.resourceEnergyEl);
     container.appendChild(this.chainComboEl);
+    container.appendChild(this.wardMazeMovesEl);
     container.appendChild(this.boardEl);
     container.appendChild(this.scoresPanel);
   }
@@ -200,24 +208,42 @@ export class Renderer {
   render(state: GameState): void {
     // Update status
     if (state.status === GameStatus.Won) {
-      this.statusEl.textContent = '🎉 You Win!';
+      if (state.gamemode === Gamemode.WardMaze) {
+        const moves = (state as GameState & { wardMazeMoves?: number }).wardMazeMoves ?? 0;
+        this.statusEl.textContent = `🎉 You Win! (${moves} moves)`;
+      } else {
+        this.statusEl.textContent = '🎉 You Win!';
+      }
       this.faceBtn.textContent = '😎';
     } else if (state.status === GameStatus.Lost) {
       this.statusEl.textContent = '💥 Game Over';
       this.faceBtn.textContent = '😵';
     } else if (state.status === GameStatus.Idle) {
-      this.statusEl.textContent = 'Click or press Space to start';
+      if (state.gamemode === Gamemode.WardMaze) {
+        this.statusEl.textContent = 'Tap any cell to start';
+      } else {
+        this.statusEl.textContent = 'Click or press Space to start';
+      }
       this.faceBtn.textContent = '😊';
     } else {
-      this.statusEl.textContent = '';
+      if (state.gamemode === Gamemode.WardMaze) {
+        this.statusEl.textContent = 'Reach the 🚩!';
+      } else {
+        this.statusEl.textContent = '';
+      }
       this.faceBtn.textContent = '😊';
     }
 
     // Update mine count and timer
     const rows = state.grid.length;
     const cols = rows > 0 ? state.grid[0].length : 0;
-    const totalMines = rows * cols - state.totalSafeCells;
-    this.mineCountEl.textContent = String(Math.max(0, totalMines - state.flagsPlaced));
+    if (state.gamemode === Gamemode.WardMaze) {
+      const wards = (state as GameState & { wardMazeWards?: { row: number; col: number }[] }).wardMazeWards;
+      this.mineCountEl.textContent = `🛡 ${(wards ?? []).length}`;
+    } else {
+      const totalMines = rows * cols - state.totalSafeCells;
+      this.mineCountEl.textContent = String(Math.max(0, totalMines - state.flagsPlaced));
+    }
     this.timerEl.textContent = String(state.elapsedSeconds);
 
     // ─── Gamemode Info ───────────────────────────────────────────────────
@@ -228,6 +254,7 @@ export class Renderer {
     this.renderResourceEnergy(state);
     this.renderChainCombo(state);
     this.renderShadowFog(state);
+    this.renderWardMaze(state);
 
     // ─── Board ───────────────────────────────────────────────────────────
     // Store grid for click handler (needed to detect flagged cells on mobile)
@@ -333,6 +360,7 @@ export class Renderer {
       [Gamemode.Shadow]: '🌑 Shadow Minesweeper',
       [Gamemode.Resource]: '⚡ Resource Minesweeper',
       [Gamemode.Chain]: '🔥 Chain Minesweeper',
+      [Gamemode.WardMaze]: '🗺️ Ward Maze',
     };
     this.gamemodeInfoEl.textContent = modeNames[state.gamemode] || 'Classic';
 
@@ -342,6 +370,7 @@ export class Renderer {
       [Gamemode.Shadow]: 'Only cells near revealed tiles are visible. Tap to reveal and expand the fog.',
       [Gamemode.Resource]: 'Reveals cost 1 energy, flags cost 2. ⚡ Energy cells restore 2 energy. You cannot reveal or flag without enough energy — actions are blocked when energy is too low. Don\'t run out!',
       [Gamemode.Chain]: 'Quick successive reveals build combos. 3x auto-flags, 5x clears zeros, 8x blasts a 3×3 area.',
+      [Gamemode.WardMaze]: 'Tap ♟ to select yourself, then tap an adjacent cell to move. Tap a ward (🛡 number) to select it, then tap anywhere to relocate it. Reach 🚩 in the fewest moves. Wards destroyed on mines!',
     };
     this.gamemodeInstructionsEl.textContent = instructions[state.gamemode] || '';
   }
@@ -469,6 +498,90 @@ export class Renderer {
         } else {
           cellEl.classList.remove('fog-hidden');
           cellEl.style.opacity = '';
+        }
+      }
+    }
+  }
+
+  // ─── WardMaze: Player, Goal, Wards, Selection ─────────────────────────
+
+  private renderWardMaze(state: GameState): void {
+    const isWardMaze = state.gamemode === Gamemode.WardMaze;
+
+    if (!isWardMaze) {
+      this.wardMazeMovesEl.style.display = 'none';
+      return;
+    }
+
+    this.wardMazeMovesEl.style.display = 'block';
+
+    const wmState = state as GameState & {
+      wardMazePlayerPos?: { row: number; col: number };
+      wardMazeGoalPos?: { row: number; col: number };
+      wardMazeWards?: { row: number; col: number }[];
+      wardMazeMoves?: number;
+      wardMazeSelectedWardIndex?: number | null;
+      wardMazePlayerSelected?: boolean;
+    };
+
+    // Update move counter
+    const moves = wmState.wardMazeMoves ?? 0;
+    this.wardMazeMovesEl.textContent = `Moves: ${moves}`;
+
+    const rows = state.grid.length;
+    const cols = state.grid[0].length;
+    const playerPos = wmState.wardMazePlayerPos;
+    const goalPos = wmState.wardMazeGoalPos;
+    const wards = wmState.wardMazeWards ?? [];
+    const selectedWardIdx = wmState.wardMazeSelectedWardIndex;
+    const playerSelected = wmState.wardMazePlayerSelected ?? false;
+
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const index = r * cols + c;
+        const cellEl = this.boardEl.children[index] as HTMLElement;
+
+        // Clear WardMaze-specific classes
+        cellEl.classList.remove('wardmaze-player', 'wardmaze-goal', 'wardmaze-ward', 'wardmaze-selected');
+
+        // Player position
+        if (playerPos && r === playerPos.row && c === playerPos.col) {
+          cellEl.classList.add('wardmaze-player');
+          cellEl.textContent = '♟';
+        }
+
+        // Goal position
+        if (goalPos && r === goalPos.row && c === goalPos.col) {
+          cellEl.classList.add('wardmaze-goal');
+          // Only show goal if not on player
+          if (!(playerPos && r === playerPos.row && c === playerPos.col)) {
+            cellEl.textContent = '🚩';
+          }
+        }
+
+        // Wards
+        const wardIdx = wards.findIndex(w => w.row === r && w.col === c);
+        if (wardIdx !== -1) {
+          cellEl.classList.add('wardmaze-ward');
+          const cell = state.grid[r][c];
+          if (cell.isMine) {
+            cellEl.textContent = '💣';
+          } else {
+            const count = cell.adjacentMines;
+            cellEl.textContent = count > 0 ? String(count) : '🛡';
+            if (count > 0) {
+              cellEl.style.color = NUMBER_COLORS[count] || '#000';
+            }
+          }
+          // Selection highlight
+          if (selectedWardIdx === wardIdx) {
+            cellEl.classList.add('wardmaze-selected');
+          }
+        }
+
+        // Player selection highlight
+        if (playerSelected && playerPos && r === playerPos.row && c === playerPos.col) {
+          cellEl.classList.add('wardmaze-selected');
         }
       }
     }

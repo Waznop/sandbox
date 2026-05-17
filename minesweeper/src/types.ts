@@ -78,6 +78,7 @@ export const Gamemode = {
   Shadow: 'shadow',
   Resource: 'resource',
   Chain: 'chain',
+  WardMaze: 'ward-maze',
 } as const;
 export type Gamemode = (typeof Gamemode)[keyof typeof Gamemode];
 
@@ -97,6 +98,8 @@ export interface GamemodeConfig {
   chainComboTimeout?: number;
   chainAutoFlagThreshold?: number;
   chainChainRevealThreshold?: number;
+  // WardMaze
+  wardMazeWardCount?: number;
 }
 
 // ─── Arcane Card System ────────────────────────────────────────────────────
@@ -136,6 +139,8 @@ export interface Cell {
   isEnergyCell?: boolean;
   isShadowMine?: boolean;
   shielded?: boolean;
+  // WardMaze: cell was revealed safe by a ward
+  wardRevealed?: boolean;
 }
 
 export interface GameState {
@@ -164,4 +169,11 @@ export interface GameState {
   chainCombo?: number;
   chainLastRevealTime?: number;
   chainChainCellsRevealed?: number;
+  // WardMaze
+  wardMazePlayerPos?: { row: number; col: number };
+  wardMazeGoalPos?: { row: number; col: number };
+  wardMazeWards?: { row: number; col: number }[];
+  wardMazeMoves?: number;
+  wardMazeSelectedWardIndex?: number | null;
+  wardMazePlayerSelected?: boolean;
 }

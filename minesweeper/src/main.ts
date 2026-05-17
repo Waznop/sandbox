@@ -3,7 +3,7 @@ import { GameEngine } from './engine/GameEngine';
 import { Renderer } from './renderer';
 import { PRESET_CONFIGS, GameStatus, Gamemode } from './types';
 import type { Direction } from './types';
-import { ArcaneGamemode, ShadowGamemode, ResourceGamemode, ChainGamemode } from './gamemodes';
+import { ArcaneGamemode, ShadowGamemode, ResourceGamemode, ChainGamemode, WardMazeGamemode } from './gamemodes';
 
 const app = document.querySelector<HTMLDivElement>('#app')!;
 
@@ -30,6 +30,9 @@ function initGamemode(mode: Gamemode): void {
       break;
     case Gamemode.Chain:
       gmInstance = new ChainGamemode();
+      break;
+    case Gamemode.WardMaze:
+      gmInstance = new WardMazeGamemode();
       break;
   }
 
