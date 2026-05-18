@@ -539,7 +539,7 @@ export class Renderer {
     const playerSelected = wmState.wardMazePlayerSelected ?? false;
 
     if (!playerPos || !goalPos || wards.length === 0) {
-      console.warn('WardMaze state missing:', { playerPos, goalPos, wardsLen: wards.length });
+      this.wardMazeMovesEl.textContent = `Moves: ${moves} [STATE MISSING]`;
       return;
     }
 
