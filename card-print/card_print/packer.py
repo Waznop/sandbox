@@ -54,29 +54,35 @@ def _fill_page_aggressive(
     remaining: dict[str, int],
     items_by_name: dict[str, Item],
 ) -> tuple[list[SlotEntry], dict[str, int]]:
-    """Greedy fill: allow over-printing to fill slots and reduce PDFs.
+    """Fill page by distributing slots proportionally to remaining demand.
 
-    Fills slots with highest-demand items even beyond their remaining demand,
-    to minimize empty slots and potentially reduce the number of pages needed.
+    This allows over-printing but spreads it across items rather than
+    dumping it all on the highest-demand item. Minimizes empty slots.
     """
     entries: list[SlotEntry] = []
-    slots_left = SLOTS_PER_PAGE
+    active = {n: d for n, d in remaining.items() if d > 0}
+    total_demand = sum(active.values())
+    if total_demand == 0:
+        return entries, remaining
 
-    sorted_items = sorted(
-        remaining.items(),
-        key=lambda kv: (-kv[1], items_by_name[kv[0]].index),
-    )
+    # Proportional distribution of slots
+    raw = {n: d / total_demand * SLOTS_PER_PAGE for n, d in active.items()}
 
-    for name, demand_left in sorted_items:
-        if slots_left <= 0 or demand_left <= 0:
-            continue
-        # Aggressive: fill up to remaining slots, even if it over-prints
-        copies = min(slots_left, demand_left)
-        if copies <= 0:
-            continue
-        entries.append(SlotEntry(item=items_by_name[name], copies=copies))
-        slots_left -= copies
-        remaining[name] = max(0, demand_left - copies * print_count)
+    # Round down, then distribute remainder by largest fractional part
+    copies = {n: int(v) for n, v in raw.items()}
+    assigned = sum(copies.values())
+    remainder = SLOTS_PER_PAGE - assigned
+
+    frac_order = sorted(active.keys(), key=lambda n: raw[n] - copies[n], reverse=True)
+    for i, name in enumerate(frac_order):
+        if i >= remainder:
+            break
+        copies[name] += 1
+
+    for name, c in copies.items():
+        if c > 0:
+            entries.append(SlotEntry(item=items_by_name[name], copies=c))
+            remaining[name] = max(0, remaining[name] - c * print_count)
 
     return entries, remaining
 

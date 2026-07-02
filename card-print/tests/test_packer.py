@@ -167,14 +167,14 @@ def test_scoring_pdfs_over_extras_larger():
 def test_scoring_empty_over_extras():
     """(sheets, empty, extras, pdfs): prefer fewer empty slots over fewer extras.
 
-    [4, 4]: demand=8, min_sheets=1.
-    At print_count=1: img1x4, img2x4 = 8 slots, 1 empty, 0 extras, 1 PDF
-    At print_count=2: img1x2, img2x2 = 4 slots, 5 empty, 0 extras, 1 PDF
-    -> should pick print_count=1 (1 empty < 5 empty)
+    [5, 7]: demand=12, min_sheets=2.
+    With empty-first: p1x2 proportional fill -> img2x5, img1x4 (9/9 slots).
+    0 empty, 6 extras (3 each balanced).
     """
-    r = pack_items(_items([4, 4]), scoring=("sheets", "empty", "extras", "pdfs"))
-    assert r.total_sheets == 1
-    assert r.total_empty == 1
+    r = pack_items(_items([5, 7]), scoring=("sheets", "empty", "extras", "pdfs"))
+    assert r.total_sheets == 2
+    assert r.total_empty == 0
+    assert r.total_extras == 6
     assert r.num_pdfs == 1
 
 
