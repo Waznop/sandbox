@@ -1,0 +1,20 @@
+[project]
+name = "card-print"
+version = "0.1.0"
+description = "CLI tool for packing card images into optimal print sheets"
+requires-python = ">=3.10"
+dependencies = [
+    "click>=8.0",
+    "reportlab>=4.0",
+    "Pillow>=10.0",
+]
+
+[project.scripts]
+card-print = "card_print.__main__:cli"
+
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.backends._legacy:_Backend"
+
+[tool.setuptools.packages.find]
+include = ["card_print*"]
