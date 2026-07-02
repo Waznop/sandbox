@@ -8,6 +8,7 @@ import click
 from .parser import parse_input
 from .packer import pack_items
 from .pdf import render_page
+from .models import DEFAULT_SCORING, ALL_DIMENSIONS
 
 
 @click.command()
@@ -17,16 +18,33 @@ from .pdf import render_page
               help="CSV file with headers including 'count' column")
 @click.option("--output", "-o", default=".", type=click.Path(file_okay=False, dir_okay=True),
               help="Output directory for PDFs (default: current directory)")
+@click.option("--scoring", "-s", default=None,
+              help="Scoring priority (comma-separated). Available: sheets, extras, empty, pdfs. "
+                   "Default: sheets,extras,empty,pdfs")
 @click.option("--dry-run", is_flag=True, default=False,
               help="Show packing plan without generating PDFs")
-def cli(images: str, csv: str, output: str, dry_run: bool) -> None:
+def cli(images: str, csv: str, output: str, scoring: str, dry_run: bool) -> None:
     """Pack card images into optimal print sheets."""
     image_dir = Path(images).resolve()
     csv_path = Path(csv).resolve()
     output_dir = Path(output).resolve()
 
+    # Parse scoring config
+    if scoring:
+        dims = tuple(d.strip() for d in scoring.split(","))
+        for d in dims:
+            if d not in ALL_DIMENSIONS:
+                click.echo(f"Error: unknown scoring dimension '{d}'. Available: {', '.join(sorted(ALL_DIMENSIONS))}", err=True)
+                sys.exit(1)
+        if len(dims) != len(set(dims)):
+            click.echo("Error: scoring dimensions must be unique", err=True)
+            sys.exit(1)
+    else:
+        dims = DEFAULT_SCORING
+
     click.echo(f"Reading images from: {image_dir}")
     click.echo(f"Reading CSV from: {csv_path}")
+    click.echo(f"Scoring: {','.join(dims)}")
     items = parse_input(csv_path, image_dir)
 
     if not items:
@@ -38,7 +56,7 @@ def cli(images: str, csv: str, output: str, dry_run: bool) -> None:
     click.echo(f"Found {len(active)} item(s) to print"
                f"{f', {len(skipped)} skipped (count=0)' if skipped else ''}")
 
-    result = pack_items(items)
+    result = pack_items(items, scoring=dims)
 
     if not result.pages:
         click.echo("No pages to generate (all counts are 0)")
