@@ -4,6 +4,18 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 
+# Available scoring dimensions
+SHEETS = "sheets"
+EXTRAS = "extras"
+EMPTY = "empty"
+PDFS = "pdfs"
+
+ALL_DIMENSIONS = {SHEETS, EXTRAS, EMPTY, PDFS}
+
+# Default scoring: minimize sheets, then extras, then empty slots, then PDFs
+DEFAULT_SCORING = (SHEETS, EXTRAS, EMPTY, PDFS)
+
+
 @dataclass
 class Item:
     """A single card image with its print demand."""
@@ -63,11 +75,8 @@ class Page:
 class PackResult:
     """Result of the packing algorithm.
 
-    Scoring priorities (lower is better):
-    1. total_sheets
-    2. total_extras (over-printed copies)
-    3. total_empty (unfilled slots across pages)
-    4. num_pdfs
+    Scoring is configurable via a priority tuple of dimension names.
+    Default: (sheets, extras, empty, pdfs)
     """
     pages: list[Page] = field(default_factory=list)
     demands: dict[str, int] = field(default_factory=dict)
@@ -103,10 +112,19 @@ class PackResult:
         """Total unfilled slots across all pages."""
         return sum(p.empty_slots for p in self.pages)
 
-    @property
-    def score(self) -> tuple[int, ...]:
-        """Comparison tuple: (sheets, extras, empty, num_pdfs)."""
-        return (self.total_sheets, self.total_extras, self.total_empty, self.num_pdfs)
+    def score(self, priority: tuple[str, ...] = DEFAULT_SCORING) -> tuple[int, ...]:
+        """Comparison tuple built from the given priority order.
+
+        Available dimensions: 'sheets', 'extras', 'empty', 'pdfs'
+        Default priority: (sheets, extras, empty, pdfs)
+        """
+        dim_map = {
+            SHEETS: self.total_sheets,
+            EXTRAS: self.total_extras,
+            EMPTY: self.total_empty,
+            PDFS: self.num_pdfs,
+        }
+        return tuple(dim_map[d] for d in priority)
 
     def is_valid(self) -> bool:
         """Check if all demands are met."""
