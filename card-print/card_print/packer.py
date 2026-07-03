@@ -4,22 +4,12 @@ Allows multiple copies per item per page. Items can span pages with
 different print counts. Minimizes according to configurable scoring priority.
 """
 from __future__ import annotations
+import math
+from itertools import combinations
 
 from .models import Item, SlotEntry, Page, PackResult, DEFAULT_SCORING
 
 SLOTS_PER_PAGE = 9
-
-
-def _partitions(n: int, max_part: int = 9) -> list[list[int]]:
-    """Generate integer partitions of n into parts <= max_part, sorted
-    by number of parts ascending (fewer PDFs preferred)."""
-    if n == 0:
-        return [[]]
-    result = []
-    for first in range(min(n, max_part), 0, -1):
-        for rest in _partitions(n - first, first):
-            result.append([first] + rest)
-    return result
 
 
 def _fill_page_conservative(
@@ -54,11 +44,7 @@ def _fill_page_aggressive(
     remaining: dict[str, int],
     items_by_name: dict[str, Item],
 ) -> tuple[list[SlotEntry], dict[str, int]]:
-    """Fill page by distributing slots proportionally to remaining demand.
-
-    This allows over-printing but spreads it across items rather than
-    dumping it all on the highest-demand item. Minimizes empty slots.
-    """
+    """Fill page by distributing slots proportionally to remaining demand."""
     entries: list[SlotEntry] = []
     active = {n: d for n, d in remaining.items() if d > 0}
     total_demand = sum(active.values())
@@ -106,6 +92,83 @@ def _try_partition(
     return PackResult(pages=pages, demands=demands)
 
 
+def _smart_partitions(n: int, max_part: int = 9, limit: int = 50) -> list[list[int]]:
+    """Generate a limited set of smart integer partitions of n.
+
+    For small n, generates all partitions.
+    For large n, generates a curated set of promising partitions:
+    - All 9s (max print count per page)
+    - Mix of 9s and smaller counts
+    - Just a few varied partitions
+    """
+    if n <= 15:
+        # Small enough to enumerate all
+        return _partitions_all(n, max_part)
+
+    # For large n, generate smart partitions
+    result = []
+
+    # Strategy 1: All 9s, with remainder
+    if n > 0:
+        nines = n // 9
+        rem = n % 9
+        if nines > 0:
+            if rem > 0:
+                result.append([9] * nines + [rem])
+            else:
+                result.append([9] * nines)
+
+    # Strategy 2: Mix of high and low print counts
+    for pc in range(min(n, max_part), 0, -1):
+        if n - pc >= 0:
+            rest = n - pc
+            if rest == 0:
+                result.append([pc])
+            elif rest <= 9:
+                result.append([pc, rest])
+            else:
+                # Fill rest with 9s
+                nines = rest // 9
+                rem = rest % 9
+                p = [pc] + [9] * nines + ([rem] if rem > 0 else [])
+                if p not in result:
+                    result.append(p)
+
+    # Strategy 3: All 1s (many pages, no over-printing)
+    if n <= 50:  # Don't generate too many pages
+        result.append([1] * n)
+
+    # Strategy 4: Balanced partitions
+    if n >= 2:
+        half = n // 2
+        rem = n % 2
+        result.append([half, half] + ([rem] if rem > 0 else []))
+
+    # Deduplicate and limit
+    seen = set()
+    unique = []
+    for p in result:
+        key = tuple(sorted(p, reverse=True))
+        if key not in seen:
+            seen.add(key)
+            unique.append(p)
+        if len(unique) >= limit:
+            break
+
+    return unique
+
+
+def _partitions_all(n: int, max_part: int = 9) -> list[list[int]]:
+    """Generate all integer partitions of n into parts <= max_part."""
+    if n == 0:
+        return [[]]
+    result = []
+    for first in range(min(n, max_part), 0, -1):
+        for rest in _partitions_all(n - first, first):
+            result.append([first] + rest)
+    return result
+
+
 def pack_items(
     items: list[Item],
     scoring: tuple[str, ...] = DEFAULT_SCORING,
@@ -121,7 +184,7 @@ def pack_items(
     Strategy:
     1. Compute min_sheets = ceil(total_demand / 9)
     2. For target_sheets from min_sheets upward:
-       a. Generate partitions of target_sheets into print counts
+       a. Generate smart partitions of target_sheets into print counts
        b. For each partition, try both conservative and aggressive fill
        c. Check validity, track best by scoring priority
     3. Return best valid solution
@@ -137,8 +200,11 @@ def pack_items(
 
     best: PackResult | None = None
 
-    for target_sheets in range(min_sheets, total_demand + 1):
-        partitions = _partitions(target_sheets)
+    # Limit search depth based on input size
+    max_sheets = min(total_demand, min_sheets * 3) if total_demand <= 100 else min_sheets * 2
+
+    for target_sheets in range(min_sheets, max_sheets + 1):
+        partitions = _smart_partitions(target_sheets)
 
         for partition in partitions:
             # Try conservative (no over-printing)
@@ -153,9 +219,6 @@ def pack_items(
 
         # Early exit: perfect packing found
         if best and best.total_extras == 0 and best.total_empty == 0:
-            break
-
-        if target_sheets > min_sheets * 3:
             break
 
     return best if best else PackResult(pages=[], demands=demands)
