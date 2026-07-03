@@ -220,12 +220,16 @@ def test_large_default_scoring():
 
 
 def test_large_pdfs_first():
-    """74 items, pdfs-first scoring -> 17 sheets, 10 pdfs, 0 extras, 2 empty."""
+    """74 items, pdfs-first scoring -> 18 sheets, 9 pdfs, 10 extras, 1 empty.
+
+    When pdfs is prioritized over sheets, the solver accepts 1 extra sheet
+    and 10 extras to reduce from 10 to 9 PDFs.
+    """
     r = pack_items(_large_items(), scoring=("pdfs", "sheets", "extras", "empty"))
-    assert r.total_sheets == 17
-    assert r.num_pdfs == 10
-    assert r.total_extras == 0
-    assert r.total_empty == 2
+    assert r.num_pdfs == 9
+    assert r.total_sheets == 18
+    assert r.total_extras == 10
+    assert r.total_empty == 1
 
 
 def test_large_sheets_then_empty():
@@ -241,12 +245,16 @@ def test_large_sheets_then_empty():
 
 
 def test_large_empty_first():
-    """74 items, empty-first scoring -> 17 sheets, 15 pdfs, 1 extra, 1 empty."""
+    """74 items, empty-first scoring -> 19 sheets, 12 pdfs, 20 extras, 0 empty.
+
+    When empty is prioritized, the solver accepts more sheets and extras
+    to eliminate empty slots entirely.
+    """
     r = pack_items(_large_items(), scoring=("empty", "sheets", "pdfs", "extras"))
-    assert r.total_sheets == 17
-    assert r.total_empty == 1
-    assert r.total_extras == 1
-    assert r.num_pdfs == 15
+    assert r.total_empty == 0
+    assert r.total_sheets == 19
+    assert r.total_extras == 20
+    assert r.num_pdfs == 12
 
 
 def test_large_extras_then_pdfs():
