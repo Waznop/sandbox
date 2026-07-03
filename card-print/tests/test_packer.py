@@ -191,3 +191,68 @@ def test_scoring_sheets_always_first():
     ]:
         r = pack_items(_items([1, 1]), scoring=scoring)
         assert r.total_sheets == 1, f"Failed for scoring {scoring}"
+
+
+# === Large real-world scenario: 74 items, 68 with demand > 0 ===
+# Demand distribution: 2x9, 1x6, 23x3, 10x2, 32x1 = 151 total demand
+
+def _large_items():
+    """74-item dataset matching real card print scenario."""
+    demands = {i: 1 for i in range(74)}
+    demands[24] = 9   # img25
+    demands[25] = 9   # img26
+    demands[26] = 6   # img27
+    for i in range(27, 50):  # img28-img50
+        demands[i] = 3
+    for i in range(50, 60):  # img51-img60
+        demands[i] = 2
+    # img1-img24, img61-img74 stay at 1
+    return [Item(i, f"img{i+1}", f"/img{i+1}.png", demands[i]) for i in range(74)]
+
+
+def test_large_default_scoring():
+    """74 items, default scoring (sheets, extras, empty, pdfs) -> 17 sheets, 10 pdfs, 0 extras, 2 empty."""
+    r = pack_items(_large_items())
+    assert r.total_sheets == 17
+    assert r.num_pdfs == 10
+    assert r.total_extras == 0
+    assert r.total_empty == 2
+
+
+def test_large_pdfs_first():
+    """74 items, pdfs-first scoring -> 17 sheets, 10 pdfs, 0 extras, 2 empty."""
+    r = pack_items(_large_items(), scoring=("pdfs", "sheets", "extras", "empty"))
+    assert r.total_sheets == 17
+    assert r.num_pdfs == 10
+    assert r.total_extras == 0
+    assert r.total_empty == 2
+
+
+def test_large_sheets_then_empty():
+    """74 items, sheets then empty -> 17 sheets, 15 pdfs, 1 extra, 1 empty.
+
+    When empty is prioritized over extras, the solver accepts 1 extra to save 1 empty slot.
+    """
+    r = pack_items(_large_items(), scoring=("sheets", "empty", "extras", "pdfs"))
+    assert r.total_sheets == 17
+    assert r.total_empty == 1
+    assert r.total_extras == 1
+    assert r.num_pdfs == 15
+
+
+def test_large_empty_first():
+    """74 items, empty-first scoring -> 17 sheets, 15 pdfs, 1 extra, 1 empty."""
+    r = pack_items(_large_items(), scoring=("empty", "sheets", "pdfs", "extras"))
+    assert r.total_sheets == 17
+    assert r.total_empty == 1
+    assert r.total_extras == 1
+    assert r.num_pdfs == 15
+
+
+def test_large_extras_then_pdfs():
+    """74 items, sheets then extras then pdfs -> 17 sheets, 10 pdfs, 0 extras, 2 empty."""
+    r = pack_items(_large_items(), scoring=("sheets", "extras", "pdfs", "empty"))
+    assert r.total_sheets == 17
+    assert r.num_pdfs == 10
+    assert r.total_extras == 0
+    assert r.total_empty == 2
