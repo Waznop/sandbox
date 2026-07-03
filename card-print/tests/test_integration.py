@@ -32,10 +32,10 @@ def test_full_pipeline_spec_example():
 
         csv_path = tmp / "test.csv"
         csv_path.write_text(
-            "name,count\n"
-            "img1,3\nimg2,3\nimg3,3\nimg4,6\nimg5,6\nimg6,6\n"
-            "img7,1\nimg8,1\nimg9,1\nimg10,\nimg11,1\nimg12,1\n"
-            "img13,0\nimg14,1\nimg15,1\n"
+            "count\n"
+            "3\n3\n3\n6\n6\n6\n"
+            "1\n1\n1\n\n1\n1\n"
+            "0\n1\n1\n"
         )
 
         items = parse_input(csv_path, img_dir)
@@ -43,7 +43,7 @@ def test_full_pipeline_spec_example():
 
         assert result.total_sheets == 4
         assert result.total_extras == 0
-        assert result.total_empty == 1
+        assert result.total_empty == 2
         assert result.num_pdfs == 2
 
         out_dir = tmp / "output"
@@ -64,7 +64,7 @@ def test_full_pipeline_custom_scoring():
             _create_png(img_dir / f"img{i}.png")
 
         csv_path = tmp / "test.csv"
-        csv_path.write_text("name,count\nimg1,5\nimg2,7\n")
+        csv_path.write_text("count\n5\n7\n")
 
         items = parse_input(csv_path, img_dir)
 
