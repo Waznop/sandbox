@@ -13,7 +13,8 @@ def parse_input(csv_path: Path, image_dir: Path) -> list[Item]:
     """Parse CSV and discover matching images.
 
     - First row must have a "count" column
-    - First column (or "name" column) gives image filename
+    - Row N (after header) corresponds to img[N-1] (positional mapping)
+    - Looks for img1.png, img2.png, ... in the image directory
     - Empty count -> 1, "0" -> skip, negative -> clamped to 0
     - Missing images -> warning + skip
     """
@@ -37,12 +38,8 @@ def parse_input(csv_path: Path, image_dir: Path) -> list[Item]:
             print("Error: CSV must have a 'count' header", file=sys.stderr)
             sys.exit(1)
 
-        name_col = "name" if "name" in reader.fieldnames else reader.fieldnames[0]
-
-        for idx, row in enumerate(reader):
-            name = row[name_col].strip()
-            if not name:
-                continue
+        for row_num, row in enumerate(reader, start=1):
+            img_name = f"img{row_num}"
 
             count_str = row["count"].strip() if row["count"] else ""
             if count_str == "":
@@ -51,18 +48,17 @@ def parse_input(csv_path: Path, image_dir: Path) -> list[Item]:
                 try:
                     count = int(count_str)
                 except ValueError:
-                    print(f"Warning: non-integer count '{count_str}' row {idx+1}, skipping", file=sys.stderr)
+                    print(f"Warning: non-integer count '{count_str}' row {row_num}, skipping", file=sys.stderr)
                     continue
 
-            stem = Path(name).stem.lower()
-            img_path = available.get(stem)
+            img_path = available.get(img_name.lower())
             if img_path is None:
-                print(f"Warning: no image for '{name}', skipping", file=sys.stderr)
+                print(f"Warning: no image for '{img_name}', skipping", file=sys.stderr)
                 continue
 
             items.append(Item(
-                index=idx,
-                name=Path(name).stem,
+                index=row_num - 1,
+                name=img_name,
                 path=img_path.resolve(),
                 demand=max(0, count),
             ))
