@@ -5,7 +5,7 @@ from pathlib import Path
 from PIL import Image
 
 
-def generate_preview(pdf_paths: list[Path], output_path: Path, dpi: int = 75) -> None:
+def generate_preview(pdf_paths: list[Path], output_path: Path, dpi: int = 150) -> None:
     """Generate a combined preview image of all PDF pages.
 
     Each page is rendered at low resolution and arranged in a grid.

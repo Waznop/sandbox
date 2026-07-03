@@ -72,10 +72,16 @@ def cli(images: str, csv: str, output: str, scoring: str, preview: bool, dry_run
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
+    # Clean old PDFs from previous runs
+    for old_pdf in output_dir.glob("p*.pdf"):
+        old_pdf.unlink()
+
+    pdf_paths: list[Path] = []
     for i, page in enumerate(result.pages, 1):
         filename = f"p{i}x{page.print_count}.pdf"
         output_path = output_dir / filename
         render_page(page, output_path)
+        pdf_paths.append(output_path)
         click.echo(f"  Written: {output_path} ({page.used_slots}/9 slots)")
 
     click.echo(f"\nDone! {result.num_pdfs} PDF(s) in {output_dir}")
@@ -87,7 +93,7 @@ def cli(images: str, csv: str, output: str, scoring: str, preview: bool, dry_run
         try:
             from .preview import generate_preview
             preview_path = output_dir / "preview.png"
-            generate_preview(list(output_dir.glob("p*.pdf")), preview_path)
+            generate_preview(pdf_paths, preview_path)
             click.echo(f"  Preview: {preview_path}")
         except ImportError:
             click.echo("  (Preview requires PyMuPDF: pip install PyMuPDF)", err=True)
