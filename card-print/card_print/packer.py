@@ -11,14 +11,17 @@ from .models import Item, SlotEntry, Page, PackResult, DEFAULT_SCORING
 SLOTS_PER_PAGE = 9
 
 
-def _partitions_sorted(n: int, max_val: int = 9, min_val: int = 1) -> list[tuple[int, ...]]:
+def _partitions_sorted(n: int, max_val: int = 9, min_val: int = 1, limit: int = 1000) -> list[tuple[int, ...]]:
     """Generate partitions of n into parts in [min_val, max_val].
 
     Returns tuples sorted by fewest parts first (fewer PDFs = better).
+    Limits to 'limit' partitions to keep search feasible.
     """
     results: list[tuple[int, ...]] = []
 
     def _recurse(remaining: int, max_allowed: int, current: list[int]) -> None:
+        if len(results) >= limit:
+            return
         if remaining == 0:
             results.append(tuple(sorted(current, reverse=True)))
             return
@@ -29,9 +32,43 @@ def _partitions_sorted(n: int, max_val: int = 9, min_val: int = 1) -> list[tuple
             current.append(v)
             _recurse(remaining - v, v, current)
             current.pop()
+            if len(results) >= limit:
+                return
 
     _recurse(n, max_val, [])
     results.sort(key=lambda p: (len(p), p))
+    return results
+
+
+def _partitions_with_k_parts(n: int, k: int, max_val: int = 9, min_val: int = 1, limit: int = 100) -> list[tuple[int, ...]]:
+    """Generate partitions of n into exactly k parts, each in [min_val, max_val]."""
+    results: list[tuple[int, ...]] = []
+
+    def _recurse(remaining: int, parts_left: int, max_allowed: int, current: list[int]) -> None:
+        if len(results) >= limit:
+            return
+        if parts_left == 0:
+            if remaining == 0:
+                results.append(tuple(sorted(current, reverse=True)))
+            return
+        min_possible = parts_left * min_val
+        max_possible = parts_left * max_val
+        if remaining < min_possible or remaining > max_possible:
+            return
+
+        start = min(max_allowed, remaining - (parts_left - 1) * min_val)
+        end = max(min_val, remaining - (parts_left - 1) * max_val)
+        for v in range(start, end - 1, -1):
+            if v < min_val or v > max_val:
+                continue
+            current.append(v)
+            _recurse(remaining - v, parts_left - 1, v, current)
+            current.pop()
+            if len(results) >= limit:
+                return
+
+    _recurse(n, k, max_val, [])
+    results.sort(key=lambda p: p)
     return results
 
 
@@ -40,25 +77,17 @@ def _fill_pages(
     demands: dict[str, int],
     items_by_name: dict[str, Item],
 ) -> list[Page] | None:
-    """Fill pages page-by-page, preferring items that fit exactly on each page type.
-
-    For each page (highest pc first), fill it with items whose remaining demand
-    is divisible by pc (exact fit, no extras). Then fill remaining slots with
-    other items, preferring those that produce the fewest extras.
-    """
+    """Fill pages page-by-page, preferring items that fit exactly on each page type."""
     remaining = dict(demands)
     slots_left = [SLOTS_PER_PAGE] * len(print_counts)
     page_entries: list[list[SlotEntry]] = [[] for _ in range(len(print_counts))]
 
-    # Process pages from highest print count to lowest
     pc_indices = sorted(range(len(print_counts)), key=lambda i: -print_counts[i])
 
     for pi in pc_indices:
         pc = print_counts[pi]
         slots = SLOTS_PER_PAGE
 
-        # Phase 1: Fill with items that divide evenly by pc (no extras)
-        # Sort by demand descending
         exact_items = sorted(
             [(n, d) for n, d in remaining.items() if d > 0 and d % pc == 0],
             key=lambda x: (-x[1], items_by_name[x[0]].index),
@@ -74,8 +103,6 @@ def _fill_pages(
             slots -= copies
             remaining[name] -= copies * pc
 
-        # Phase 2: Fill remaining slots with other items
-        # Prefer items where (demand % pc) == 0 or close, then by demand descending
         other_items = sorted(
             [(n, d) for n, d in remaining.items() if d > 0],
             key=lambda x: (x[1] % pc, -x[1], items_by_name[x[0]].index),
@@ -91,11 +118,9 @@ def _fill_pages(
             slots -= copies
             remaining[name] = max(0, demand - copies * pc)
 
-    # Check all demands satisfied
     if any(v > 0 for v in remaining.values()):
         return None
 
-    # Build pages
     pages: list[Page] = []
     for i in range(len(print_counts)):
         if page_entries[i]:
@@ -116,32 +141,53 @@ def pack_items(
     demands = {it.name: it.demand for it in active}
     total_demand = sum(demands.values())
     min_sheets = math.ceil(total_demand / SLOTS_PER_PAGE)
+    min_pdfs = math.ceil(total_demand / (SLOTS_PER_PAGE * 9))
     items_by_name = {it.name: it for it in active}
 
     best: PackResult | None = None
     best_score = None
 
-    max_sheets = min(total_demand, min_sheets + 20)
+    primary = scoring[0]
+    max_sheets = min(total_demand, min_sheets + 50)
 
-    for target_sheets in range(min_sheets, max_sheets + 1):
-        partitions = _partitions_sorted(target_sheets)
+    if primary == "pdfs":
+        # Search by PDF count first
+        max_pdfs = min_sheets
+        for target_pdfs in range(min_pdfs, max_pdfs + 1):
+            min_sheets_for_pdfs = math.ceil(total_demand / (target_pdfs * SLOTS_PER_PAGE))
+            max_sheets_for_pdfs = min(max_sheets, target_pdfs * 9)
 
-        for print_counts in partitions:
-            pages = _fill_pages(print_counts, demands, items_by_name)
-            if pages is None:
-                continue
+            for target_sheets in range(min_sheets_for_pdfs, max_sheets_for_pdfs + 1):
+                partitions = _partitions_with_k_parts(target_sheets, target_pdfs, limit=50)
+                for print_counts in partitions:
+                    pages = _fill_pages(print_counts, demands, items_by_name)
+                    if pages is None:
+                        continue
+                    result = PackResult(pages=pages, demands=demands)
+                    score = result.score(scoring)
+                    if best_score is None or score < best_score:
+                        best_score = score
+                        best = result
 
-            result = PackResult(pages=pages, demands=demands)
-            score = result.score(scoring)
+            if best and best.total_extras == 0 and best.total_empty == 0:
+                break
+    else:
+        # Search by sheet count first
+        for target_sheets in range(min_sheets, max_sheets + 1):
+            partitions = _partitions_sorted(target_sheets, limit=500)
+            for print_counts in partitions:
+                pages = _fill_pages(print_counts, demands, items_by_name)
+                if pages is None:
+                    continue
+                result = PackResult(pages=pages, demands=demands)
+                score = result.score(scoring)
+                if best_score is None or score < best_score:
+                    best_score = score
+                    best = result
 
-            if best_score is None or score < best_score:
-                best_score = score
-                best = result
-
-            if result.total_extras == 0 and result.total_empty == 0:
-                return result
-
-        if best and best.total_sheets == target_sheets:
-            break
+            if best and best.total_extras == 0 and best.total_empty == 0:
+                break
+            if primary == "sheets" and best.total_sheets == target_sheets:
+                break
 
     return best if best else PackResult(pages=[], demands=demands)
