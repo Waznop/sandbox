@@ -75,8 +75,15 @@ def _composite_card(
     (including border pixels). Border pixels are restored later by
     the overlay mask compositing step.
     """
-    # Load and resize card image to fill the entire slot
+    # Load and rotate card image according to slot's rotation
     card_img = Image.open(img_path).convert("RGB")
+    if slot.rotation == 90:
+        card_img = card_img.transpose(Image.ROTATE_270)  # PIL uses CCW, so 270 = 90 CW
+    elif slot.rotation == 180:
+        card_img = card_img.transpose(Image.ROTATE_180)
+    elif slot.rotation == 270:
+        card_img = card_img.transpose(Image.ROTATE_90)  # PIL uses CCW, so 90 = 270 CW
+    # Resize to fill the entire slot (borders inclusive)
     card_img = card_img.resize((slot.width, slot.height), Image.LANCZOS)
     card_arr = np.array(card_img)
 
