@@ -5,29 +5,38 @@ from pathlib import Path
 from PIL import Image
 
 
-def generate_preview(pdf_paths: list[Path], output_path: Path, dpi: int = 150) -> None:
-    """Generate a combined preview image of all PDF pages.
+def generate_preview(output_paths: list[Path], output_path: Path, dpi: int = 150) -> None:
+    """Generate a combined preview image of all output pages.
 
-    Each page is rendered at low resolution and arranged in a grid.
+    Supports both PDF and PNG inputs. PDFs are rendered at low DPI,
+    PNGs are resized down.
     """
-    try:
-        import fitz  # PyMuPDF
-    except ImportError:
-        raise ImportError("Preview requires PyMuPDF: pip install PyMuPDF")
-
-    if not pdf_paths:
+    if not output_paths:
         return
 
-    # Render each PDF page as a low-res image
     page_images = []
-    for pdf_path in sorted(pdf_paths):
-        doc = fitz.open(str(pdf_path))
-        page = doc[0]
-        pix = page.get_pixmap(dpi=dpi)
-        # Convert to PIL Image
-        img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+
+    for output_path_item in sorted(output_paths):
+        if output_path_item.suffix.lower() == ".pdf":
+            try:
+                import fitz  # PyMuPDF
+            except ImportError:
+                raise ImportError("PDF preview requires PyMuPDF: pip install PyMuPDF")
+
+            doc = fitz.open(str(output_path_item))
+            page = doc[0]
+            pix = page.get_pixmap(dpi=dpi)
+            img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+            doc.close()
+        else:
+            # PNG or other image format — resize down
+            img = Image.open(str(output_path_item))
+            # Scale down proportionally to match DPI reduction
+            scale = dpi / 300  # Assume original is 300 DPI
+            new_size = (int(img.width * scale), int(img.height * scale))
+            img = img.resize(new_size, Image.LANCZOS)
+
         page_images.append(img)
-        doc.close()
 
     if not page_images:
         return

@@ -8,8 +8,6 @@ import math
 
 from .models import Item, SlotEntry, Page, PackResult, DEFAULT_SCORING
 
-SLOTS_PER_PAGE = 9
-
 
 def _partitions_sorted(n: int, max_val: int = 9, min_val: int = 1, limit: int = 1000) -> list[tuple[int, ...]]:
     """Generate partitions of n into parts in [min_val, max_val].
@@ -76,17 +74,18 @@ def _fill_pages(
     print_counts: tuple[int, ...],
     demands: dict[str, int],
     items_by_name: dict[str, Item],
+    slots_per_page: int = 9,
 ) -> list[Page] | None:
     """Fill pages page-by-page, preferring items that fit exactly on each page type."""
     remaining = dict(demands)
-    slots_left = [SLOTS_PER_PAGE] * len(print_counts)
+    slots_left = [slots_per_page] * len(print_counts)
     page_entries: list[list[SlotEntry]] = [[] for _ in range(len(print_counts))]
 
     pc_indices = sorted(range(len(print_counts)), key=lambda i: -print_counts[i])
 
     for pi in pc_indices:
         pc = print_counts[pi]
-        slots = SLOTS_PER_PAGE
+        slots = slots_per_page
 
         exact_items = sorted(
             [(n, d) for n, d in remaining.items() if d > 0 and d % pc == 0],
@@ -124,7 +123,11 @@ def _fill_pages(
     pages: list[Page] = []
     for i in range(len(print_counts)):
         if page_entries[i]:
-            pages.append(Page(entries=page_entries[i], print_count=print_counts[i]))
+            pages.append(Page(
+                entries=page_entries[i],
+                print_count=print_counts[i],
+                slots_per_page=slots_per_page,
+            ))
 
     return pages
 
@@ -132,6 +135,7 @@ def _fill_pages(
 def pack_items(
     items: list[Item],
     scoring: tuple[str, ...] = DEFAULT_SCORING,
+    slots_per_page: int = 9,
 ) -> PackResult:
     """Pack items into optimal print sheets."""
     active = [it for it in items if it.demand > 0]
@@ -140,8 +144,8 @@ def pack_items(
 
     demands = {it.name: it.demand for it in active}
     total_demand = sum(demands.values())
-    min_sheets = math.ceil(total_demand / SLOTS_PER_PAGE)
-    min_pdfs = math.ceil(total_demand / (SLOTS_PER_PAGE * 9))
+    min_sheets = math.ceil(total_demand / slots_per_page)
+    min_pdfs = math.ceil(total_demand / (slots_per_page * 9))
     items_by_name = {it.name: it for it in active}
 
     best: PackResult | None = None
@@ -154,13 +158,15 @@ def pack_items(
         # Search by PDF count first
         max_pdfs = min_sheets
         for target_pdfs in range(min_pdfs, max_pdfs + 1):
-            min_sheets_for_pdfs = math.ceil(total_demand / (target_pdfs * SLOTS_PER_PAGE))
+            min_sheets_for_pdfs = math.ceil(total_demand / (target_pdfs * slots_per_page))
             max_sheets_for_pdfs = min(max_sheets, target_pdfs * 9)
 
             for target_sheets in range(min_sheets_for_pdfs, max_sheets_for_pdfs + 1):
-                partitions = _partitions_with_k_parts(target_sheets, target_pdfs, limit=50)
+                partitions = _partitions_with_k_parts(
+                    target_sheets, target_pdfs, max_val=slots_per_page, limit=50
+                )
                 for print_counts in partitions:
-                    pages = _fill_pages(print_counts, demands, items_by_name)
+                    pages = _fill_pages(print_counts, demands, items_by_name, slots_per_page)
                     if pages is None:
                         continue
                     result = PackResult(pages=pages, demands=demands)
@@ -174,9 +180,9 @@ def pack_items(
     else:
         # Search by sheet count first
         for target_sheets in range(min_sheets, max_sheets + 1):
-            partitions = _partitions_sorted(target_sheets, limit=500)
+            partitions = _partitions_sorted(target_sheets, max_val=slots_per_page, limit=500)
             for print_counts in partitions:
-                pages = _fill_pages(print_counts, demands, items_by_name)
+                pages = _fill_pages(print_counts, demands, items_by_name, slots_per_page)
                 if pages is None:
                     continue
                 result = PackResult(pages=pages, demands=demands)
