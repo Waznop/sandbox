@@ -119,14 +119,14 @@ class CardSlot:
         y: Top edge of the content area (pixel, inside red border)
         width: Content area width (pixels, between blue borders)
         height: Content area height (pixels, between blue borders)
-        orientation: LANDSCAPE if width > height, PORTRAIT otherwise
+        rotation: CW rotation angle from corner directions (0/90/180/270)
     """
     index: int
     x: int
     y: int
     width: int
     height: int
-    orientation: str  # "landscape" or "portrait"
+    rotation: int  # 0, 90, 180, or 270 degrees CW
 
     @property
     def right(self) -> int:
@@ -256,7 +256,11 @@ def parse_template(template_path: Path) -> Template:
     4. For each corner: determine which 2 perpendicular directions red extends
     5. Trace each direction (red+overlay) until blue → dimension length
     6. Compute slot: width = right + left, height = down + up
-    7. Orientation: LANDSCAPE if width > height, else PORTRAIT
+    7. Rotation from corner direction pair (deterministic mapping):
+       - top + left → 0° (no rotation)
+       - top + right → 90° CW
+       - right + bottom → 180° CW
+       - bottom + left → 270° CW
     8. Build overlay mask and base image
     """
     img = Image.open(template_path).convert("RGBA")
@@ -293,14 +297,14 @@ def parse_template(template_path: Path) -> Template:
         slot_h = dims.get('down', 0) + dims.get('up', 0)
         
         if slot_w > 10 and slot_h > 10:
-            orientation = "landscape" if slot_w > slot_h else "portrait"
+            rotation = _directions_to_rotation(dirs)
             slots.append(CardSlot(
                 index=idx,
                 x=cx - dims.get('left', 0) + 1,  # +1 to skip blue border
                 y=cy - dims.get('up', 0) + 1,
                 width=slot_w,
                 height=slot_h,
-                orientation=orientation,
+                rotation=rotation,  # 0, 90, 180, 270 degrees CW
             ))
     
     # Sort by position (row-major)
@@ -399,6 +403,28 @@ def _find_l_corners(h_segments, v_segments) -> list[tuple]:
         result.append((cy, cx, dirs))  # dirs filled by caller
     
     return result
+
+
+def _directions_to_rotation(directions: set[str]) -> int:
+    """Map corner direction pair to CW rotation angle.
+
+    The two red directions extending from the corner pixel determine
+    how much the card image must be rotated to be upright:
+
+    - top + left → 0° (no rotation)
+    - top + right → 90° CW
+    - right + bottom → 180° CW
+    - bottom + left → 270° CW
+    """
+    if directions == {"top", "left"}:
+        return 0
+    elif directions == {"top", "right"}:
+        return 90
+    elif directions == {"right", "bottom"}:
+        return 180
+    elif directions == {"bottom", "left"}:
+        return 270
+    raise ValueError(f"Unexpected corner directions: {directions}")
 
 
 def _trace_until_blue(start, direction, blue_mask, overlay_mask, h, w):
