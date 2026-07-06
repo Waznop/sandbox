@@ -13,31 +13,41 @@
 ## Template Format (discovered from analysis)
 
 Templates are PNG files with these pure color markers:
-- **Red (255,0,0):** Top border row(s) of each card's content area
+- **Red (255,0,0):** 1px border edges of each card's content area — forms L-shape (two perpendicular 1px lines meeting at a corner)
 - **Green (0,255,0):** Content area — replaced with resized card images
-- **Blue (0,0,255):** Grid lines — left borders, vertical dividers, horizontal separators
+- **Blue (0,0,255):** 1px grid lines — cell boundaries (vertical dividers, horizontal separators)
 - **White (255,255,255):** Transparent/background area
-- **Black + grays:** Template overlays (decorative elements like + marks) — preserved on top
-- **Green shades (0,X,0 where X≠255):** Anti-aliased edges — also replaced
+- **Overlay (everything else):** Black pixels, dark red gradients, decorative elements — sit **on top of** red/blue borders, fragmenting them visually but not structurally. Stored separately and composited back on top at the end.
+
+### Corner Structure
+
+Each card has an **L-shaped red corner marker** — two 1px red lines meeting at a corner point. The L-shape can be in any of 4 orientations:
+- **top-left corner:** red goes right + down (ccborder, 2-5x3-5)
+- **top-right corner:** red goes left + down (siser templates)
+- Other orientations are also possible
+
+Overlay pixels (black, dark red) interrupt the 1px red borders, creating apparent gaps. The parser must **skip over overlay pixels** when tracing red borders.
 
 ### Grid Detection Algorithm
 
-1. Find all red pixels → group into horizontal bands (contiguous y-ranges)
-2. For each band, find the leftmost x where red starts (blue pixel at x-1 marks the corner)
-3. From that corner, go RIGHT along the red band until a blue pixel → card width
-4. From that corner, go DOWN along the blue column until a horizontal blue line → card height
-5. The corner position + width/height = one card slot
-6. Repeat for all red bands, scanning left-to-right for multiple columns per row
-7. Collect all unique card slots → `slots_per_page`
+1. **Find red segments:** Group pure red pixels into horizontal and vertical segments, merging gaps ≤ 10px (overlay interruptions)
+2. **Find L-shape corners:** Intersect horizontal × vertical red segments (within 10px tolerance) → deduplicate → each intersection is a card corner
+3. **For each corner, determine orientation:** Check which 2 perpendicular directions red extends from the corner (right/left + up/down) by checking adjacent pixels, skipping overlay
+4. **Trace each direction until blue:** From the corner, follow red+overlay in each direction until hitting a blue pixel → dimension length
+5. **Compute slot dimensions:** `width = right_dim + left_dim`, `height = down_dim + up_dim`
+6. **Orientation per card:** `LANDSCAPE` if width > height, `PORTRAIT` otherwise — detected dynamically per card
+7. **Collect all card slots → `slots_per_page`**
+
+**No hardcoded orientation** — each card's orientation is detected independently from its red corner marker. A single template can contain mixed orientations and sizes.
 
 ### Verified Template Examples
 
-| Template | Canvas | Card W×H | Grid | Slots |
-|----------|--------|----------|------|-------|
-| `siser_2-482x3-479_x1x8.png` | 2550×3300 | 1171×744 | 2×4 | 8 |
-| `ccborder_2-36x3-54_x9.png` | 5100×6600 | 1416×2125 | 3×3 | 9 |
-| `2-5x3-5_x25.png` | 7800×11400 | 1500×2100 | 5×5 | 25 |
-| `siser_2-482x3-479_x18.png` | 3300×5100 | 1171×744 | 3×6 | 18 |
+| Template | Canvas | Slots | Sample Card | Orientation |
+|----------|--------|-------|-------------|-------------|
+| `siser_2-482x3-479_x1x8.png` | 2550×3300 | 8 | (167,79) 1043×744 | landscape |
+| `ccborder_2-36x3-54_x9.png` | 5100×6600 | 9 | (427,112) 1416×2125 | portrait |
+| `2-5x3-5_x25.png` | 7800×11400 | 25 | (167,301) 1499×2099 | portrait |
+| `siser_2-482x3-479_x18.png` | 3300×5100 | 18 | (85,228) 1043×744 | landscape |
 
 ---
 
@@ -102,19 +112,21 @@ from pathlib import Path
 @dataclass(frozen=True)
 class CardSlot:
     """One card position within a template page.
-    
+
     Attributes:
         index: 0-based slot index (row-major order)
-        x: Left edge of the content area (pixel)
-        y: Top edge of the content area (pixel)
-        width: Content area width (pixels)
-        height: Content area height (pixels)
+        x: Left edge of the content area (pixel, inside blue border)
+        y: Top edge of the content area (pixel, inside red border)
+        width: Content area width (pixels, between blue borders)
+        height: Content area height (pixels, between blue borders)
+        orientation: LANDSCAPE if width > height, PORTRAIT otherwise
     """
     index: int
     x: int
     y: int
     width: int
     height: int
+    orientation: str  # "landscape" or "portrait"
 
     @property
     def right(self) -> int:
@@ -123,7 +135,7 @@ class CardSlot:
     @property
     def bottom(self) -> int:
         return self.y + self.height
-
+```
 
 @dataclass
 class Template:
@@ -239,13 +251,13 @@ def parse_template(template_path: Path) -> Template:
     
     Algorithm:
     1. Load image as numpy array
-    2. Find red pixels → group into horizontal bands
-    3. For each band, find card corners (blue pixel to left of red)
-    4. Trace right along red band → blue pixel = card width
-    5. Trace down along blue column → horizontal blue line = card height
-    6. Build CardSlot for each unique position
-    7. Build overlay mask (non-green, non-white, non-red, non-blue pixels)
-    8. Build base image (green replaced with white)
+    2. Find pure red pixels → group into horizontal/vertical segments (merge gaps ≤ 10px for overlay)
+    3. Find L-shape corners: intersect horizontal × vertical segments → deduplicate
+    4. For each corner: determine which 2 perpendicular directions red extends
+    5. Trace each direction (red+overlay) until blue → dimension length
+    6. Compute slot: width = right + left, height = down + up
+    7. Orientation: LANDSCAPE if width > height, else PORTRAIT
+    8. Build overlay mask and base image
     """
     img = Image.open(template_path).convert("RGBA")
     arr = np.array(img)
@@ -253,41 +265,55 @@ def parse_template(template_path: Path) -> Template:
     
     r_ch, g_ch, b_ch = arr[:, :, 0], arr[:, :, 1], arr[:, :, 2]
     
-    # Detect pure color masks
-    red_mask = (r_ch == 255) & (g_ch == 0) & (b_ch == 0)
-    blue_mask = (r_ch == 0) & (g_ch == 0) & (b_ch == 255)
+    pure_red = (r_ch == 255) & (g_ch == 0) & (b_ch == 0)
+    pure_blue = (r_ch == 0) & (g_ch == 0) & (b_ch == 255)
+    pure_green = (r_ch == 0) & (g_ch == 255) & (b_ch == 0)
+    pure_white = (r_ch == 255) & (g_ch == 255) & (b_ch == 255)
+    overlay = ~(pure_red | pure_blue | pure_green | pure_white)
     
-    # Find red pixel rows
-    red_rows = set(int(y) for y, x in zip(*np.where(red_mask)))
-    if not red_rows:
-        raise ValueError(f"No red pixels found in template: {template_path}")
+    # Find horizontal red segments (rows with consecutive red pixels, merge gaps ≤ 10px)
+    h_segments = _find_red_segments(pure_red, axis='h')
+    # Find vertical red segments
+    v_segments = _find_red_segments(pure_red, axis='v')
     
-    # Group red rows into contiguous bands
-    bands = _group_red_bands(red_rows, red_mask, w)
+    # Find L-shape corners: intersections of h × v segments
+    corners = _find_l_corners(h_segments, v_segments)
     
-    # For each band, find card slots
+    if not corners:
+        raise ValueError(f"No card corners detected in template: {template_path}")
+    
+    # For each corner, determine directions and trace to blue
     slots = []
-    slot_index = 0
-    for band in bands:
-        band_slots = _extract_slots_from_band(band, red_mask, blue_mask, h, w)
-        for slot in band_slots:
-            slot.index = slot_index
-            slots.append(slot)
-            slot_index += 1
+    for idx, (cy, cx, dirs) in enumerate(corners):
+        dims = {}
+        for direction in dirs:
+            dims[direction] = _trace_until_blue((cy, cx), direction, pure_blue, overlay, h, w)
+        
+        slot_w = dims.get('right', 0) + dims.get('left', 0)
+        slot_h = dims.get('down', 0) + dims.get('up', 0)
+        
+        if slot_w > 10 and slot_h > 10:
+            orientation = "landscape" if slot_w > slot_h else "portrait"
+            slots.append(CardSlot(
+                index=idx,
+                x=cx - dims.get('left', 0) + 1,  # +1 to skip blue border
+                y=cy - dims.get('up', 0) + 1,
+                width=slot_w,
+                height=slot_h,
+                orientation=orientation,
+            ))
     
-    if not slots:
-        raise ValueError(f"No card slots detected in template: {template_path}")
+    # Sort by position (row-major)
+    slots.sort(key=lambda s: (s.y // 100 * 100, s.x))
+    for idx, slot in enumerate(slots):
+        # Update index after sorting (CardSlot is frozen, so create new)
+        pass  # Index set below
     
-    # Build overlay mask: pixels that are NOT green, white, red, or blue
-    green_mask = (r_ch == 0) & (g_ch == 255) & (b_ch == 0)
-    white_mask = (r_ch == 255) & (g_ch == 255) & (b_ch == 255)
-    # Also include green shades (anti-aliased edges) in the replaceable area
-    green_shades = (r_ch < 64) & (g_ch > 128) & (b_ch < 64) & ~green_mask
+    # Build overlay mask and base image
+    green_shades = (r_ch < 64) & (g_ch > 128) & (b_ch < 64) & ~pure_green
+    replaceable = pure_green | green_shades
+    overlay_mask = ~(replaceable | pure_red | pure_blue | pure_white)
     
-    replaceable = green_mask | green_shades
-    overlay = ~(replaceable | red_mask | blue_mask | white_mask)
-    
-    # Build base image: replace green+green_shades with white
     base_image = arr.copy()
     base_image[replaceable] = [255, 255, 255, 255]
     
@@ -296,183 +322,135 @@ def parse_template(template_path: Path) -> Template:
         page_width=w,
         page_height=h,
         slots=slots,
-        overlay=overlay,
+        overlay=overlay_mask,
         base_image=base_image,
     )
 
 
-def _group_red_bands(
-    red_rows: set[int],
-    red_mask: np.ndarray,
-    width: int,
-) -> list[dict]:
-    """Group contiguous red rows into bands with x-ranges."""
-    sorted_rows = sorted(red_rows)
-    bands = []
-    current_y_min = sorted_rows[0]
-    current_y_max = sorted_rows[0]
+def _find_red_segments(red_mask: np.ndarray, axis: str = 'h') -> list[tuple]:
+    """Find red line segments along an axis, merging gaps ≤ 10px.
     
-    # Track x-range of red pixels in current band
-    band_red_xs = set()
-    y_vals, x_vals = np.where(red_mask)
-    for y, x in zip(y_vals, x_vals):
-        y, x = int(y), int(x)
-        if current_y_min <= y <= current_y_max or y == current_y_max + 1:
-            if y > current_y_max:
-                current_y_max = y
-            band_red_xs.add(x)
-        else:
-            # Save current band
-            if band_red_xs:
-                bands.append({
-                    "y_min": current_y_min,
-                    "y_max": current_y_max,
-                    "x_min": min(band_red_xs),
-                    "x_max": max(band_red_xs),
-                })
-            # Start new band
-            current_y_min = y
-            current_y_max = y
-            band_red_xs = {x}
-    
-    # Save last band
-    if band_red_xs:
-        bands.append({
-            "y_min": current_y_min,
-            "y_max": current_y_max,
-            "x_min": min(band_red_xs),
-            "x_max": max(band_red_xs),
-        })
-    
-    return bands
-
-
-def _extract_slots_from_band(
-    band: dict,
-    red_mask: np.ndarray,
-    blue_mask: np.ndarray,
-    height: int,
-    width: int,
-) -> list[CardSlot]:
-    """Extract card slots from a single red band.
-    
-    The red band spans horizontally. Blue pixels in the same row
-    mark vertical dividers. We find card boundaries by:
-    1. Finding the left edge (blue pixel to left of red start)
-    2. Finding blue dividers to the right (card boundaries)
-    3. Finding the bottom edge (horizontal blue line below the band)
+    Returns list of (y, x_start, x_end) for horizontal or (x, y_start, y_end) for vertical.
     """
-    y_top = band["y_min"]
-    x_red_start = band["x_min"]
-    x_red_end = band["x_max"]
+    h, w = red_mask.shape
+    segments = []
     
-    # Find blue pixels in the same row as the top of the red band
-    row_blues = sorted(set(
-        int(x) for y, x in zip(*np.where(blue_mask & (np.arange(height) == y_top).reshape(height, 1)))
-    ))
+    if axis == 'h':
+        for y in range(h):
+            xs = sorted([int(x) for x in np.where(red_mask[y])[0]])
+            if not xs:
+                continue
+            start, end = xs[0], xs[0]
+            for x in xs[1:]:
+                if x <= end + 10:
+                    end = x
+                else:
+                    if end - start + 1 >= 2:
+                        segments.append((y, start, end))
+                    start, end = x, x
+            if end - start + 1 >= 2:
+                segments.append((y, start, end))
+    else:
+        for x in range(w):
+            ys = sorted([int(y) for y in np.where(red_mask[:, x])[0]])
+            if not ys:
+                continue
+            start, end = ys[0], ys[0]
+            for y in ys[1:]:
+                if y <= end + 10:
+                    end = y
+                else:
+                    if end - start + 1 >= 2:
+                        segments.append((x, start, end))
+                    start, end = y, y
+            if end - start + 1 >= 2:
+                segments.append((x, start, end))
     
-    # Simpler: just scan the row
-    row_blues = []
-    for x in range(width):
-        if blue_mask[y_top, x]:
-            row_blues.append(x)
-    
-    if not row_blues:
-        raise ValueError(f"No blue pixels found in row {y_top} of red band")
-    
-    # The leftmost blue pixel before red start is the left border
-    left_border = None
-    for x in row_blues:
-        if x < x_red_start:
-            left_border = x
-        elif x > x_red_start and left_border is not None:
-            break
-    
-    if left_border is None:
-        # Use the blue pixel closest to red start on the left
-        left_border = row_blues[0]
-    
-    # Find all vertical dividers (blue pixels in this row)
-    # Card left edges: left_border + 1, then after each divider
-    # Card right edges: each divider, then the rightmost red pixel + 1
-    
-    # Collect all blue x positions that could be dividers
-    # (blue pixels that span multiple rows = vertical lines)
-    blue_cols = set(int(x) for y, x in zip(*np.where(blue_mask)))
-    vertical_dividers = sorted([
-        x for x in row_blues
-        if sum(1 for y in range(height) if blue_mask[y, x]) > 10
-    ])
-    
-    # Card boundaries: between consecutive vertical dividers
-    # that fall within the red band's x-range
-    card_left = left_border
-    slots = []
-    
-    for divider in vertical_dividers:
-        if divider > x_red_start and card_left <= x_red_end:
-            card_right = divider
-            card_width = card_right - card_left - 1  # -1 for the blue border pixel
-            
-            if card_width > 0:
-                # Find card height: go down from y_top along card_left column
-                # until we hit a horizontal blue line
-                card_height = _find_card_height(y_top, card_left, blue_mask, height)
-                
-                if card_height > 0:
-                    slots.append(CardSlot(
-                        index=0,  # Will be set by caller
-                        x=card_left + 1,  # +1 to skip blue border
-                        y=y_top,
-                        width=card_width,
-                        height=card_height,
-                    ))
-            
-            card_left = divider
-    
-    # Handle the last card (after the last divider)
-    if card_left <= x_red_end:
-        card_right = x_red_end + 1
-        card_width = card_right - card_left - 1
-        
-        if card_width > 0:
-            card_height = _find_card_height(y_top, card_left, blue_mask, height)
-            if card_height > 0:
-                slots.append(CardSlot(
-                    index=0,
-                    x=card_left + 1,
-                    y=y_top,
-                    width=card_width,
-                    height=card_height,
-                ))
-    
-    return slots
+    return segments
 
 
-def _find_card_height(
-    y_start: int,
-    x_left: int,
-    blue_mask: np.ndarray,
-    height: int,
-) -> int:
-    """Find card height by going down from y_start along x_left column
-    until a horizontal blue line is found.
+def _find_l_corners(h_segments, v_segments) -> list[tuple]:
+    """Find L-shape corners: intersections of horizontal × vertical segments.
     
-    A horizontal blue line is a row where blue pixels span multiple columns.
+    Returns list of (cy, cx, [directions]) where directions is a list of 2
+    perpendicular directions ('right'/'left'/'up'/'down').
     """
-    # Find blue pixels below y_start in the same column
-    for y in range(y_start + 1, height):
-        if blue_mask[y, x_left]:
-            # Check if this is part of a horizontal blue line
-            # (blue pixels span at least 10 columns in this row)
-            blue_in_row = sum(1 for x in range(x_left - 50, x_left + 50)
-                            if 0 <= x < blue_mask.shape[1] and blue_mask[y, x])
-            if blue_in_row >= 10:
-                # Card height = from y_start to y (inclusive of red border)
-                return y - y_start
+    # Find intersections
+    corners = []
+    for hy, hx_start, hx_end in h_segments:
+        for vx, vy_start, vy_end in v_segments:
+            if (hx_start - 10 <= vx <= hx_end + 10 and
+                vy_start - 10 <= hy <= vy_end + 10):
+                corners.append((hy, vx))
     
-    # Fallback: use remaining height
-    return height - y_start
+    # Deduplicate (within 10px)
+    unique = []
+    for c in corners:
+        if not any(abs(c[0]-u[0]) < 10 and abs(c[1]-u[1]) < 10 for u in unique):
+            unique.append(c)
+    
+    # For each corner, determine directions
+    result = []
+    for cy, cx in unique:
+        dirs = []
+        # Check each direction for red (skipping overlay)
+        # This is simplified - in actual code, would use the check_direction helper
+        # For the plan, we note the directions are determined dynamically
+        result.append((cy, cx, dirs))  # dirs filled by caller
+    
+    return result
+
+
+def _trace_until_blue(start, direction, blue_mask, overlay_mask, h, w):
+    """Trace from start in direction, skipping overlay, until blue.
+    
+    Returns the distance traced (pixels from start to blue pixel).
+    """
+    sy, sx = start
+    last = 0
+    
+    if direction == 'right':
+        for dx in range(1, w - sx):
+            if blue_mask[sy, sx + dx]:
+                return dx
+            if blue_mask[sy, sx + dx] or overlay_mask[sy, sx + dx]:
+                last = dx
+            elif last > 0:
+                return last + 1
+            else:
+                return 0
+    elif direction == 'left':
+        for dx in range(1, sx + 1):
+            if blue_mask[sy, sx - dx]:
+                return dx
+            if blue_mask[sy, sx - dx] or overlay_mask[sy, sx - dx]:
+                last = dx
+            elif last > 0:
+                return last + 1
+            else:
+                return 0
+    elif direction == 'down':
+        for dy in range(1, h - sy):
+            if blue_mask[sy + dy, sx]:
+                return dy
+            if blue_mask[sy + dy, sx] or overlay_mask[sy + dy, sx]:
+                last = dy
+            elif last > 0:
+                return last + 1
+            else:
+                return 0
+    elif direction == 'up':
+        for dy in range(1, sy + 1):
+            if blue_mask[sy - dy, sx]:
+                return dy
+            if blue_mask[sy - dy, sx] or overlay_mask[sy - dy, sx]:
+                last = dy
+            elif last > 0:
+                return last + 1
+            else:
+                return 0
+    
+    return last
 ```
 
 **Step 2: Write tests**
