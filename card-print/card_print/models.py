@@ -34,7 +34,7 @@ class SlotEntry:
 
 @dataclass
 class Page:
-    """One 3x3 page in a PDF. Has a print count C.
+    """One page in a PDF. Has a print count C and a configurable slot count.
 
     Each SlotEntry specifies how many copies of an item appear on this page.
     When printed C times, the item gets copies*C total printed copies.
@@ -42,6 +42,7 @@ class Page:
     """
     entries: list[SlotEntry] = field(default_factory=list)
     print_count: int = 1
+    slots_per_page: int = 9
 
     @property
     def used_slots(self) -> int:
@@ -51,7 +52,7 @@ class Page:
     @property
     def empty_slots(self) -> int:
         """Unfilled slots on this page."""
-        return 9 - self.used_slots
+        return self.slots_per_page - self.used_slots
 
     @property
     def printed_copies(self) -> dict[str, int]:
@@ -144,7 +145,7 @@ class PackResult:
                 f"{e.item.name}x{e.copies}" for e in page.entries
             )
             lines.append(
-                f"  p{i}x{page.print_count}.pdf: {entries_str} "
-                f"({page.used_slots}/9 slots)"
+                f"  p{i}x{page.print_count}: {entries_str} "
+                f"({page.used_slots}/{page.slots_per_page} slots)"
             )
         return "\n".join(lines)

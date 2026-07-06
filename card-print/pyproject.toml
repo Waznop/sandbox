@@ -7,6 +7,7 @@ dependencies = [
     "click>=8.0",
     "reportlab>=4.0",
     "Pillow>=10.0",
+    "numpy>=1.24",
 ]
 
 [project.scripts]
