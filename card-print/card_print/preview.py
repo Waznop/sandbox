@@ -4,12 +4,15 @@ from pathlib import Path
 
 from PIL import Image
 
+from .template_models import DEFAULT_DPI
 
-def generate_preview(output_paths: list[Path], output_path: Path, dpi: int = 150) -> None:
+
+def generate_preview(output_paths: list[Path], output_path: Path, dpi: int = 150,
+                     source_dpi: int = DEFAULT_DPI) -> None:
     """Generate a combined preview image of all output pages.
 
     Supports both PDF and PNG inputs. PDFs are rendered at low DPI,
-    PNGs are resized down.
+    PNGs are resized down from source_dpi (the template's resolution).
     """
     if not output_paths:
         return
@@ -32,7 +35,7 @@ def generate_preview(output_paths: list[Path], output_path: Path, dpi: int = 150
             # PNG or other image format — resize down
             img = Image.open(str(output_path_item))
             # Scale down proportionally to match DPI reduction
-            scale = dpi / 300  # Assume original is 300 DPI
+            scale = dpi / source_dpi
             new_size = (int(img.width * scale), int(img.height * scale))
             img = img.resize(new_size, Image.LANCZOS)
 
