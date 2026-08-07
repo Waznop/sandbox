@@ -12,7 +12,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
-from .template_models import CardSlot, Template
+from .template_models import DEFAULT_DPI, CardSlot, Template
 
 # Merge gaps up to this many pixels when finding red segments.
 # Overlay pixels (black, dark red gradients) can fragment 1px red borders
@@ -97,7 +97,22 @@ def parse_template(template_path: Path) -> Template:
         slots=slots,
         overlay=overlay_mask,
         base_image=base_image,
+        dpi=_read_dpi(img),
     )
+
+
+def _read_dpi(img: Image.Image) -> int:
+    """Read a template's resolution from its PNG metadata.
+
+    PNG stores resolution in pixels-per-metre, so the round trip leaves
+    values like 599.9988 — round to the nearest integer. Falls back to
+    DEFAULT_DPI for templates saved without a pHYs chunk.
+    """
+    dpi = img.info.get("dpi")
+    if not dpi:
+        return DEFAULT_DPI
+    x_dpi = round(dpi[0])
+    return x_dpi if x_dpi > 0 else DEFAULT_DPI
 
 
 def _find_red_segments(red_mask: np.ndarray, axis: str = 'h') -> list[tuple]:

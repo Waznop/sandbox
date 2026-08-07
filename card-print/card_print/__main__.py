@@ -78,7 +78,8 @@ def cli(images: str, csv: str, output: str, scoring: str, preview: bool,
         tmpl = parse_template_file(Path(template).resolve())
         slots_per_page = tmpl.slots_per_page
         click.echo(f"Template: {tmpl.path} ({slots_per_page} slots, "
-                   f"{tmpl.page_width}x{tmpl.page_height})")
+                   f"{tmpl.page_width}x{tmpl.page_height} @ {tmpl.dpi} DPI "
+                   f"= {tmpl.page_width / tmpl.dpi:g}x{tmpl.page_height / tmpl.dpi:g} in)")
 
     result = pack_items(items, scoring=dims, slots_per_page=slots_per_page)
 
@@ -122,7 +123,8 @@ def cli(images: str, csv: str, output: str, scoring: str, preview: bool,
         try:
             from .preview import generate_preview
             preview_path = output_dir / "preview.png"
-            generate_preview(output_paths, preview_path)
+            generate_preview(output_paths, preview_path,
+                             source_dpi=tmpl.dpi if tmpl else 300)
             click.echo(f"  Preview: {preview_path}")
         except ImportError as e:
             click.echo(f"  (Preview error: {e})", err=True)

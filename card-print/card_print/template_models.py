@@ -3,6 +3,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+# Used when a template PNG carries no resolution metadata.
+DEFAULT_DPI = 300
+
 
 @dataclass(frozen=True)
 class CardSlot:
@@ -45,6 +48,9 @@ class Template:
                  template pixels should remain on top of card images
         base_image: numpy array of the template with green pixels
                     replaced by white (background for PDF rendering)
+        dpi: Resolution of the template image, read from the PNG's own
+             metadata. Determines the physical page size of the output,
+             so a wrong value scales every printed card.
     """
     path: Path
     page_width: int
@@ -52,12 +58,8 @@ class Template:
     slots: list[CardSlot]
     overlay: object  # numpy ndarray, set after parsing
     base_image: object  # numpy ndarray, set after parsing
+    dpi: int = DEFAULT_DPI
 
     @property
     def slots_per_page(self) -> int:
         return len(self.slots)
-
-    @property
-    def dpi(self) -> int:
-        """Inferred DPI from template dimensions (assume 300 DPI standard)."""
-        return 300
