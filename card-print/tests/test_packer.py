@@ -1,6 +1,8 @@
 """Tests for the packing algorithm — 14 cases + scoring variants."""
+from pathlib import Path
+
 from card_print.models import Item, DEFAULT_SCORING
-from card_print.packer import pack_items
+from card_print.packer import pack_items, _partitions_sorted
 
 
 def _items(counts):
@@ -264,3 +266,23 @@ def test_large_extras_then_pdfs():
     assert r.num_pdfs == 10
     assert r.total_extras == 0
     assert r.total_empty == 2
+
+
+def test_partitions_keep_all_ones_after_truncation():
+    """The all-ones partition is emitted last, so truncation must re-add it.
+
+    It is the only partition guaranteed to fill (print count 1 consumes
+    demand exactly); dropping it leaves the search with no feasible option.
+    """
+    for n in (24, 30, 40):
+        parts = _partitions_sorted(n, max_val=9, limit=500)
+        assert (1,) * n in parts
+
+
+def test_large_demand_does_not_crash():
+    """Jobs needing >= 24 sheets used to raise AttributeError on a None best."""
+    items = [Item(index=i, name=f"img{i + 1}", path=Path(f"/{i}.png"), demand=3)
+             for i in range(66)]  # 198 copies -> 22 sheets minimum
+    r = pack_items(items)
+    assert r.is_valid()
+    assert r.total_sheets >= 22

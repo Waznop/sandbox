@@ -59,11 +59,8 @@ class Page:
         """Total printed copies per item name on this page."""
         return {e.item.name: e.copies * self.print_count for e in self.entries}
 
-    @property
-    def extras(self, demands: dict[str, int] | None = None) -> dict[str, int]:
-        """Over-printed copies per item (only if demands provided)."""
-        if demands is None:
-            return {}
+    def extras(self, demands: dict[str, int]) -> dict[str, int]:
+        """Over-printed copies per item on this page, against given demands."""
         result = {}
         for name, printed in self.printed_copies.items():
             over = printed - demands.get(name, 0)

@@ -34,7 +34,8 @@ def render_page(page: Page, output_path: Path) -> None:
     if page.print_count > 1:
         c.setFont("Helvetica-Bold", 10)
         c.drawCentredString(pw / 2, 0.3 * inch,
-                           f"Print {page.print_count}x  |  {page.used_slots}/9 slots")
+                           f"Print {page.print_count}x  |  "
+                           f"{page.used_slots}/{page.slots_per_page} slots")
 
     # Expand entries into individual cell placements
     cell_idx = 0

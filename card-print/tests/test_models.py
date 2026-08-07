@@ -82,3 +82,12 @@ def test_score_comparison():
 
     # (sheets, pdfs, extras, empty): B wins (1 pdf < 2 pdfs)
     assert b.score(("sheets", "pdfs", "extras", "empty")) < a.score(("sheets", "pdfs", "extras", "empty"))
+
+
+def test_page_extras_against_demands():
+    """extras() was a @property taking an argument, so it always returned {}."""
+    item = Item(0, "img1", Path("/a.png"), 5)
+    page = Page(entries=[SlotEntry(item=item, copies=4)], print_count=2)
+    assert page.printed_copies == {"img1": 8}
+    assert page.extras({"img1": 5}) == {"img1": 3}
+    assert page.extras({"img1": 8}) == {}

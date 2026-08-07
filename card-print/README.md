@@ -35,7 +35,7 @@ card-print --images ./cards --csv ./counts.csv --output ./pdfs
 With a custom template:
 
 ```bash
-card-print -i ./cards -c ./counts.csv -o ./pdfs -t ./templates-png/2-5x3-5_x9.png
+card-print -i ./cards -c ./counts.csv -o ./pdfs -t ./templates/2-5x3-5_x9.png
 ```
 
 ### Options
@@ -46,12 +46,17 @@ card-print -i ./cards -c ./counts.csv -o ./pdfs -t ./templates-png/2-5x3-5_x9.pn
 | `--csv`, `-c` | yes | CSV file with `count` column |
 | `--output`, `-o` | no | Output directory (default: `.`) |
 | `--template`, `-t` | no | Template **PNG** for a custom layout (default: built-in 3×3 grid) |
-| `--format` | no | `pdf` (default) or `png` |
+| `--format` | no | `pdf` (default) or `png` — `png` requires `--template` |
 | `--scoring`, `-s` | no | Comma-separated solver priority (default: `sheets,extras,empty,pdfs`) |
 | `--preview` | no | Also write a low-res `preview.png` of all pages |
 | `--dry-run` | no | Show plan without generating files |
 
 ### Templates
+
+Templates live in `templates/`. They are **not tracked in git** (they're
+binary assets), so a fresh clone starts without them — copy them in, or point
+`CARD_PRINT_TEMPLATES_DIR` elsewhere, which is what the integration tests read.
+Those tests skip (visibly) when no templates are present.
 
 `--template` takes a **PNG**, not a PDF — the parser detects card slots by
 scanning pixel colors, so a vector PDF can't be read. If your template set ships
