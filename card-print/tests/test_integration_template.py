@@ -1,6 +1,14 @@
-"""Integration tests with real template files."""
+"""Integration tests with real template files.
+
+The templates aren't tracked in git (see .gitignore), so these skip on a
+checkout that has no templates/ directory. They skip loudly — an absent
+template must not look like a passing test.
+"""
+import os
 import tempfile
 from pathlib import Path
+
+import pytest
 from PIL import Image
 import numpy as np
 
@@ -10,14 +18,22 @@ from card_print.models import Page, SlotEntry, Item
 from card_print.packer import pack_items
 
 
-TEMPLATES_DIR = Path("/Users/hongtai/Downloads/print-templates/templates-png")
+TEMPLATES_DIR = Path(
+    os.environ.get("CARD_PRINT_TEMPLATES_DIR",
+                   Path(__file__).resolve().parent.parent / "templates")
+)
+
+
+def _template(name: str) -> Path:
+    path = TEMPLATES_DIR / name
+    if not path.exists():
+        pytest.skip(f"template not available: {path}")
+    return path
 
 
 def test_parse_siser_x1x8():
     """Parse the siser 2x4 template (8 cards)."""
-    path = TEMPLATES_DIR / "siser_2-482x3-479_x1x8.png"
-    if not path.exists():
-        return
+    path = _template("siser_2-482x3-479_x1x8.png")
     template = parse_template(path)
     assert template.slots_per_page == 8
     assert template.page_width == 2550
@@ -26,9 +42,7 @@ def test_parse_siser_x1x8():
 
 def test_parse_ccborder_x9():
     """Parse the ccborder 3x3 template (9 cards)."""
-    path = TEMPLATES_DIR / "ccborder_2-36x3-54_x9.png"
-    if not path.exists():
-        return
+    path = _template("ccborder_2-36x3-54_x9.png")
     template = parse_template(path)
     assert template.slots_per_page == 9
     assert template.page_width == 5100
@@ -37,9 +51,7 @@ def test_parse_ccborder_x9():
 
 def test_parse_25_card_template():
     """Parse the 5x5 template (25 cards)."""
-    path = TEMPLATES_DIR / "2-5x3-5_x25.png"
-    if not path.exists():
-        return
+    path = _template("2-5x3-5_x25.png")
     template = parse_template(path)
     assert template.slots_per_page == 25
     assert template.page_width == 7800
@@ -48,9 +60,7 @@ def test_parse_25_card_template():
 
 def test_parse_siser_x18():
     """Parse the siser 3x6 template (18 cards)."""
-    path = TEMPLATES_DIR / "siser_2-482x3-479_x18.png"
-    if not path.exists():
-        return
+    path = _template("siser_2-482x3-479_x18.png")
     template = parse_template(path)
     assert template.slots_per_page == 18
     assert template.page_width == 3300
@@ -59,9 +69,7 @@ def test_parse_siser_x18():
 
 def test_parse_siser_x9():
     """Parse the siser 3x3 template (9 cards)."""
-    path = TEMPLATES_DIR / "siser_2-482x3-479_x9.png"
-    if not path.exists():
-        return
+    path = _template("siser_2-482x3-479_x9.png")
     template = parse_template(path)
     assert template.slots_per_page == 9
     assert template.page_width == 2550
@@ -70,9 +78,7 @@ def test_parse_siser_x9():
 
 def test_parse_2_5x3_5_x9():
     """Parse the 2-5x3-5 3x3 template (9 cards)."""
-    path = TEMPLATES_DIR / "2-5x3-5_x9.png"
-    if not path.exists():
-        return
+    path = _template("2-5x3-5_x9.png")
     template = parse_template(path)
     assert template.slots_per_page == 9
     assert template.page_width == 5100
@@ -81,9 +87,7 @@ def test_parse_2_5x3_5_x9():
 
 def test_end_to_end_with_ccborder():
     """Full pipeline: parse template → pack → render."""
-    path = TEMPLATES_DIR / "ccborder_2-36x3-54_x9.png"
-    if not path.exists():
-        return
+    path = _template("ccborder_2-36x3-54_x9.png")
 
     template = parse_template(path)
 
@@ -113,9 +117,7 @@ def test_end_to_end_with_ccborder():
 
 def test_end_to_end_with_siser_x1x8():
     """Full pipeline with 8-card siser template."""
-    path = TEMPLATES_DIR / "siser_2-482x3-479_x1x8.png"
-    if not path.exists():
-        return
+    path = _template("siser_2-482x3-479_x1x8.png")
 
     template = parse_template(path)
 

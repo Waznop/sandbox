@@ -49,9 +49,10 @@ def render_template_page(
         slot = template.slots[i]
         _composite_card(canvas, img_path, slot)
 
-    # Restore overlay pixels (borders, decorations) on top
-    orig_img = np.array(Image.open(template.path).convert("RGBA"))
-    canvas[overlay_mask] = orig_img[overlay_mask]
+    # Restore overlay pixels (borders, decorations) on top. base_image only
+    # differs from the original where green was whitened, and overlay excludes
+    # those pixels, so it stands in for re-reading the file on every page.
+    canvas[overlay_mask] = template.base_image[overlay_mask]
 
     # Save
     img = Image.fromarray(canvas)

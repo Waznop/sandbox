@@ -25,11 +25,12 @@ def parse_input(csv_path: Path, image_dir: Path) -> list[Item]:
         print(f"Error: Image dir not found: {image_dir}", file=sys.stderr)
         sys.exit(1)
 
-    available = {
-        f.stem.lower(): f
-        for f in image_dir.iterdir()
-        if f.suffix.lower() in SUPPORTED_EXTENSIONS
-    }
+    # Sorted so that a stem present in two formats (img1.png and img1.jpg)
+    # resolves the same way on every run rather than by directory order.
+    available: dict[str, Path] = {}
+    for f in sorted(image_dir.iterdir()):
+        if f.suffix.lower() in SUPPORTED_EXTENSIONS:
+            available.setdefault(f.stem.lower(), f)
 
     items = []
     with open(csv_path, newline="", encoding="utf-8-sig") as f:

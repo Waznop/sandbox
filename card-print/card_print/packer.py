@@ -14,6 +14,11 @@ def _partitions_sorted(n: int, max_val: int = 9, min_val: int = 1, limit: int = 
 
     Returns tuples sorted by fewest parts first (fewer PDFs = better).
     Limits to 'limit' partitions to keep search feasible.
+
+    Recursion emits large parts first, so the all-ones partition comes last
+    and gets cut by 'limit' for n >= ~24. That one always fills (print count
+    1 consumes demand exactly), so it is re-added after truncation to keep
+    at least one feasible candidate in the list.
     """
     results: list[tuple[int, ...]] = []
 
@@ -34,6 +39,12 @@ def _partitions_sorted(n: int, max_val: int = 9, min_val: int = 1, limit: int = 
                 return
 
     _recurse(n, max_val, [])
+
+    if min_val <= 1 <= max_val:
+        all_ones = (1,) * n
+        if all_ones not in results:
+            results.append(all_ones)
+
     results.sort(key=lambda p: (len(p), p))
     return results
 
@@ -145,7 +156,9 @@ def pack_items(
     demands = {it.name: it.demand for it in active}
     total_demand = sum(demands.values())
     min_sheets = math.ceil(total_demand / slots_per_page)
-    min_pdfs = math.ceil(total_demand / (slots_per_page * 9))
+    # One PDF holds at most slots_per_page slots at a print count of at most
+    # slots_per_page (the cap used when partitioning sheets into print counts).
+    min_pdfs = math.ceil(total_demand / (slots_per_page * slots_per_page))
     items_by_name = {it.name: it for it in active}
 
     best: PackResult | None = None
@@ -159,7 +172,7 @@ def pack_items(
         max_pdfs = min_sheets
         for target_pdfs in range(min_pdfs, max_pdfs + 1):
             min_sheets_for_pdfs = math.ceil(total_demand / (target_pdfs * slots_per_page))
-            max_sheets_for_pdfs = min(max_sheets, target_pdfs * 9)
+            max_sheets_for_pdfs = min(max_sheets, target_pdfs * slots_per_page)
 
             for target_sheets in range(min_sheets_for_pdfs, max_sheets_for_pdfs + 1):
                 partitions = _partitions_with_k_parts(
@@ -193,7 +206,7 @@ def pack_items(
 
             if best and best.total_extras == 0 and best.total_empty == 0:
                 break
-            if primary == "sheets" and best.total_sheets == target_sheets:
+            if best and primary == "sheets" and best.total_sheets == target_sheets:
                 break
 
     return best if best else PackResult(pages=[], demands=demands)

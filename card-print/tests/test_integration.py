@@ -88,3 +88,23 @@ def test_full_pipeline_custom_scoring():
                 pdf_path = out_dir / f"p{i}x{page.print_count}.pdf"
                 render_page(page, pdf_path)
                 assert pdf_path.read_bytes()[:4] == b"%PDF"
+
+
+def test_png_format_requires_template():
+    """Without a template the 3x3 renderer only emits PDF; asking for PNG
+    used to write PDF bytes into files named .png."""
+    from click.testing import CliRunner
+
+    from card_print.__main__ import cli
+
+    fixtures = Path(__file__).parent.parent / "fixtures"
+    with tempfile.TemporaryDirectory() as out:
+        result = CliRunner().invoke(cli, [
+            "-i", str(fixtures / "images"),
+            "-c", str(fixtures / "test.csv"),
+            "-o", out,
+            "--format", "png",
+        ])
+        assert result.exit_code == 1
+        assert "requires --template" in result.output
+        assert not list(Path(out).glob("*.png"))

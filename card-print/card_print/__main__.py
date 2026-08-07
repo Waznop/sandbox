@@ -73,6 +73,12 @@ def cli(images: str, csv: str, output: str, scoring: str, preview: bool,
     # Parse template or use default
     tmpl = None
     slots_per_page = 9
+    if output_format == "png" and not template:
+        # The default 3x3 renderer only speaks PDF; without this guard it
+        # writes PDF bytes into files named .png.
+        click.echo("Error: --format png requires --template "
+                   "(the default 3x3 layout only outputs PDF)", err=True)
+        sys.exit(1)
     if template:
         from .template import parse_template as parse_template_file
         tmpl = parse_template_file(Path(template).resolve())
