@@ -4,15 +4,38 @@ CLI tool for packing card images into optimal print sheets.
 
 ## Install
 
+The dependencies (click, reportlab, Pillow, numpy) aren't available system-wide,
+so install into a virtualenv in the repo:
+
 ```bash
 cd card-print
-pip install -e .
+python3 -m venv .venv
+.venv/bin/pip install -e .
 ```
+
+That creates the `card-print` command inside the venv. Either activate the venv
+(`source .venv/bin/activate`) and run `card-print`, or call it by path without
+activating:
+
+```bash
+.venv/bin/card-print --help
+```
+
+`.venv/bin/python -m card_print` works too and is equivalent.
+
+This only needs doing once — `-e` is an editable install, so code changes take
+effect without reinstalling.
 
 ## Usage
 
 ```bash
 card-print --images ./cards --csv ./counts.csv --output ./pdfs
+```
+
+With a custom template:
+
+```bash
+card-print -i ./cards -c ./counts.csv -o ./pdfs -t ./templates-png/2-5x3-5_x9.png
 ```
 
 ### Options
@@ -22,7 +45,29 @@ card-print --images ./cards --csv ./counts.csv --output ./pdfs
 | `--images`, `-i` | yes | Directory with card images |
 | `--csv`, `-c` | yes | CSV file with `count` column |
 | `--output`, `-o` | no | Output directory (default: `.`) |
-| `--dry-run` | no | Show plan without generating PDFs |
+| `--template`, `-t` | no | Template **PNG** for a custom layout (default: built-in 3×3 grid) |
+| `--format` | no | `pdf` (default) or `png` |
+| `--scoring`, `-s` | no | Comma-separated solver priority (default: `sheets,extras,empty,pdfs`) |
+| `--preview` | no | Also write a low-res `preview.png` of all pages |
+| `--dry-run` | no | Show plan without generating files |
+
+### Templates
+
+`--template` takes a **PNG**, not a PDF — the parser detects card slots by
+scanning pixel colors, so a vector PDF can't be read. If your template set ships
+both, point at the PNG copy.
+
+Color convention in the template image:
+
+| Color | Meaning |
+|-------|---------|
+| Red `(255,0,0)` | Corner/border marks of a card's content area |
+| Green `(0,255,0)` | Content area to be replaced by the card image |
+| Blue `(0,0,255)` | Grid lines (borders, dividers) |
+| Anything else | Overlay art, preserved on top of the card |
+
+Slot count and page size come from the template, so the packer adapts to layouts
+other than 9-up automatically.
 
 ### CSV Format
 
@@ -41,8 +86,15 @@ img3,,defaults to 1
 
 ### Output
 
-PDFs named `p{N}x{C}.pdf` where N = page number, C = print count.
-Each PDF: 3×3 grid on letter paper (8.5 × 11"), 0.5" margins.
+Files named `p{N}x{C}.pdf` where N = page number, C = how many copies of that
+sheet to print — so `p1x3.pdf` gets printed 3 times.
+
+Without `--template`: 3×3 grid on letter paper (8.5 × 11"), 0.5" margins. With
+one, the layout and page size come from the template.
+
+**Note:** on each run the output directory is cleaned of `p*.pdf` (or `p*.png`
+with `--format png`) from previous runs, so point `--output` at a dedicated
+folder rather than one holding files you want to keep.
 
 ### Algorithm
 
