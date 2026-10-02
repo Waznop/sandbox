@@ -103,6 +103,11 @@ Layout and page size come from the template — by default `2-5x3-5_x9.png`
 (9-up on letter). When no template is installed, the built-in fallback is a 3×3
 grid on letter paper (8.5 × 11"), 0.5" margins.
 
+Sheets printed more than once carry a `Print 3x | 9/9 slots` line, placed in the
+margin below the lowest card and sized to that margin. Templates whose cards run
+too close to the page edge to fit legible text get no label rather than one
+printed across the cards.
+
 **Note:** on each run the output directory is cleaned of `p*.pdf` (or `p*.png`
 with `--format png`) from previous runs, so point `--output` at a dedicated
 folder rather than one holding files you want to keep.
