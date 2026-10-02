@@ -8,6 +8,14 @@ from PIL import Image
 from .models import Page
 from .template_models import Template, CardSlot
 
+# Cap height of Helvetica as a fraction of font size — used to centre the
+# page label on its visual middle rather than its baseline.
+_CAP_HEIGHT_RATIO = 0.717
+
+# Largest page label, and the smallest still worth printing.
+_LABEL_MAX_PT = 10.0
+_LABEL_MIN_PT = 5.0
+
 
 def render_template_page(
     template: Template,
@@ -134,14 +142,48 @@ def _render_to_pdf(
         preserveAspectRatio=False,
     )
 
-    # Add print count annotation
+    # Add print count annotation, in the blank band below the lowest card.
+    # A fixed offset would land on top of the cards: most templates leave
+    # under 0.3" of margin there.
     if page.print_count > 1:
-        c.setFont("Helvetica-Bold", 10)
-        c.drawCentredString(
-            (page_w_inches / 2) * inch,
-            0.3 * inch,
-            f"Print {page.print_count}x  |  {page.used_slots}/{template.slots_per_page} slots"
-        )
+        label = (f"Print {page.print_count}x  |  "
+                 f"{page.used_slots}/{template.slots_per_page} slots")
+        placement = _label_placement(template, page_h_inches)
+        if placement is not None:
+            baseline, font_size = placement
+            c.setFont("Helvetica-Bold", font_size)
+            c.drawCentredString((page_w_inches / 2) * inch, baseline, label)
 
     c.save()
     temp_png.unlink()  # Clean up temp file
+
+
+
+def _label_placement(
+    template: Template,
+    page_h_inches: float,
+) -> tuple[float, float] | None:
+    """Baseline (in points from the page bottom) and font size for the label.
+
+    The label belongs in the blank band between the bottom of the lowest
+    card and the page edge. Returns None when that band is too short to
+    hold legible text — better no label than one printed across the cards.
+    """
+    if not template.slots:
+        return None
+
+    page_h_pt = page_h_inches * 72.0
+    lowest_card_bottom = max(slot.bottom for slot in template.slots)
+    # Slot coordinates run top-down in pixels; PDF coordinates run
+    # bottom-up in points.
+    band_pt = page_h_pt * (1.0 - lowest_card_bottom / template.page_height)
+    if band_pt <= 0:
+        return None
+
+    # Keep the text to half the band so it never crowds the cards above it.
+    font_size = min(_LABEL_MAX_PT, band_pt / 2.0)
+    if font_size < _LABEL_MIN_PT:
+        return None
+
+    baseline = band_pt / 2.0 - (_CAP_HEIGHT_RATIO * font_size) / 2.0
+    return baseline, font_size

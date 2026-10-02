@@ -90,15 +90,21 @@ def test_full_pipeline_custom_scoring():
                 assert pdf_path.read_bytes()[:4] == b"%PDF"
 
 
-def test_png_format_requires_template():
-    """Without a template the 3x3 renderer only emits PDF; asking for PNG
-    used to write PDF bytes into files named .png."""
+def test_png_format_requires_template(monkeypatch):
+    """With no template resolvable, the built-in 3x3 renderer only emits PDF;
+    asking for PNG used to write PDF bytes into files named .png.
+
+    Points CARD_PRINT_TEMPLATES_DIR at an empty directory so the default
+    template is unavailable — the state a fresh clone starts in.
+    """
     from click.testing import CliRunner
 
     from card_print.__main__ import cli
 
     fixtures = Path(__file__).parent.parent / "fixtures"
-    with tempfile.TemporaryDirectory() as out:
+    with tempfile.TemporaryDirectory() as empty_templates, \
+            tempfile.TemporaryDirectory() as out:
+        monkeypatch.setenv("CARD_PRINT_TEMPLATES_DIR", empty_templates)
         result = CliRunner().invoke(cli, [
             "-i", str(fixtures / "images"),
             "-c", str(fixtures / "test.csv"),
@@ -106,5 +112,63 @@ def test_png_format_requires_template():
             "--format", "png",
         ])
         assert result.exit_code == 1
-        assert "requires --template" in result.output
+        assert "--format png requires a template" in result.output
         assert not list(Path(out).glob("*.png"))
+
+
+def test_default_template_used_when_available(monkeypatch, tmp_path):
+    """With a template directory present, --template may be omitted: the
+    default is picked up and reported as such."""
+    from click.testing import CliRunner
+
+    from card_print.__main__ import cli
+    from card_print.template import (
+        DEFAULT_TEMPLATE_NAME, default_template_path, templates_dir,
+    )
+
+    # Resolve through the same discovery the CLI uses, so this skips (rather
+    # than fails) when CARD_PRINT_TEMPLATES_DIR points somewhere without it.
+    if default_template_path() is None:
+        import pytest
+        pytest.skip(f"default template not available in {templates_dir()}")
+
+    fixtures = Path(__file__).parent.parent / "fixtures"
+    out = tmp_path / "out"
+    result = CliRunner().invoke(cli, [
+        "-i", str(fixtures / "images"),
+        "-c", str(fixtures / "test.csv"),
+        "-o", str(out),
+    ])
+    assert result.exit_code == 0, result.output
+    assert f"{DEFAULT_TEMPLATE_NAME} (default)" in result.output
+    pdfs = list(out.glob("p*.pdf"))
+    assert pdfs
+    assert all(f.read_bytes()[:4] == b"%PDF" for f in pdfs)
+
+
+def test_explicit_template_overrides_default(monkeypatch, tmp_path):
+    """An explicit --template wins over the default, and isn't labelled
+    as the default."""
+    from click.testing import CliRunner
+
+    from card_print.__main__ import cli
+
+    from card_print.template import templates_dir
+
+    other = templates_dir() / "siser_2-482x3-479_x1x8.png"
+    if not other.exists():
+        import pytest
+        pytest.skip(f"template not available: {other}")
+
+    fixtures = Path(__file__).parent.parent / "fixtures"
+    out = tmp_path / "out"
+    result = CliRunner().invoke(cli, [
+        "-i", str(fixtures / "images"),
+        "-c", str(fixtures / "test.csv"),
+        "-o", str(out),
+        "-t", str(other),
+    ])
+    assert result.exit_code == 0, result.output
+    assert "siser_2-482x3-479_x1x8.png" in result.output
+    assert "(default)" not in result.output
+    assert "8 slots" in result.output
