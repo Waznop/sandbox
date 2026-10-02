@@ -7,12 +7,35 @@ Color convention:
 - Other colors: Template overlays (preserved on top)
 """
 from __future__ import annotations
+import os
 from pathlib import Path
 
 import numpy as np
 from PIL import Image
 
 from .template_models import DEFAULT_DPI, CardSlot, Template
+
+# Template used when --template isn't given. Templates aren't tracked in
+# git (see .gitignore), so it can be missing on a fresh clone — callers
+# get None and fall back to the built-in 3x3 grid.
+DEFAULT_TEMPLATE_NAME = "2-5x3-5_x9.png"
+
+
+def templates_dir() -> Path:
+    """Directory holding the template PNGs.
+
+    CARD_PRINT_TEMPLATES_DIR overrides the repo's own templates/.
+    """
+    override = os.environ.get("CARD_PRINT_TEMPLATES_DIR")
+    if override:
+        return Path(override)
+    return Path(__file__).resolve().parent.parent / "templates"
+
+
+def default_template_path() -> Path | None:
+    """Path to the default template, or None if it isn't installed."""
+    path = templates_dir() / DEFAULT_TEMPLATE_NAME
+    return path if path.exists() else None
 
 # Merge gaps up to this many pixels when finding red segments.
 # Overlay pixels (black, dark red gradients) can fragment 1px red borders

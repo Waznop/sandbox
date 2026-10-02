@@ -45,7 +45,7 @@ card-print -i ./cards -c ./counts.csv -o ./pdfs -t ./templates/2-5x3-5_x9.png
 | `--images`, `-i` | yes | Directory with card images |
 | `--csv`, `-c` | yes | CSV file with `count` column |
 | `--output`, `-o` | no | Output directory (default: `.`) |
-| `--template`, `-t` | no | Template **PNG** for a custom layout (default: built-in 3×3 grid) |
+| `--template`, `-t` | no | Template **PNG** for a custom layout (default: `2-5x3-5_x9.png`, see below) |
 | `--format` | no | `pdf` (default) or `png` — `png` requires `--template` |
 | `--scoring`, `-s` | no | Comma-separated solver priority (default: `sheets,extras,empty,pdfs`) |
 | `--preview` | no | Also write a low-res `preview.png` of all pages |
@@ -57,6 +57,11 @@ Templates live in `templates/`. They are **not tracked in git** (they're
 binary assets), so a fresh clone starts without them — copy them in, or point
 `CARD_PRINT_TEMPLATES_DIR` elsewhere, which is what the integration tests read.
 Those tests skip (visibly) when no templates are present.
+
+Without `--template`, the tool uses **`2-5x3-5_x9.png`** (9-up 2.5×3.5" cards,
+letter, 600 DPI) from that directory. Because templates are untracked, that
+default can be absent on a fresh clone — then it falls back to the built-in 3×3
+grid and says so in its output. Either way `--template` overrides it.
 
 `--template` takes a **PNG**, not a PDF — the parser detects card slots by
 scanning pixel colors, so a vector PDF can't be read. If your template set ships
@@ -94,8 +99,9 @@ img3,,defaults to 1
 Files named `p{N}x{C}.pdf` where N = page number, C = how many copies of that
 sheet to print — so `p1x3.pdf` gets printed 3 times.
 
-Without `--template`: 3×3 grid on letter paper (8.5 × 11"), 0.5" margins. With
-one, the layout and page size come from the template.
+Layout and page size come from the template — by default `2-5x3-5_x9.png`
+(9-up on letter). When no template is installed, the built-in fallback is a 3×3
+grid on letter paper (8.5 × 11"), 0.5" margins.
 
 **Note:** on each run the output directory is cleaned of `p*.pdf` (or `p*.png`
 with `--format png`) from previous runs, so point `--output` at a dedicated

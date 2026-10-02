@@ -28,7 +28,8 @@ from .models import DEFAULT_SCORING, ALL_DIMENSIONS
 @click.option("--template", "-t", default=None,
               type=click.Path(exists=True, file_okay=True, dir_okay=False),
               help="Path to a custom template PNG file. "
-                   "If not provided, uses the default 3x3 layout.")
+                   "Defaults to 2-5x3-5_x9.png from the templates directory, "
+                   "falling back to the built-in 3x3 layout if it isn't installed.")
 @click.option("--format", "output_format", default="pdf",
               type=click.Choice(["pdf", "png"]),
               help="Output format (default: pdf)")
@@ -37,7 +38,8 @@ def cli(images: str, csv: str, output: str, scoring: str, preview: bool,
     """Pack card images into optimal print sheets.
 
     Supports custom templates (PNG files with color-coded markers)
-    for arbitrary card layouts, or the default 3x3 grid.
+    for arbitrary card layouts. Defaults to the 2.5x3.5 9-up template,
+    or the built-in 3x3 grid when no templates are installed.
     """
     image_dir = Path(images).resolve()
     csv_path = Path(csv).resolve()
@@ -70,22 +72,33 @@ def cli(images: str, csv: str, output: str, scoring: str, preview: bool,
     click.echo(f"Found {len(active)} item(s) to print"
                f"{f', {len(skipped)} skipped (count=0)' if skipped else ''}")
 
-    # Parse template or use default
+    # Resolve the template: explicit flag, else the default one, else the
+    # built-in 3x3 grid (templates aren't tracked in git, so the default
+    # can legitimately be absent).
+    from .template import DEFAULT_TEMPLATE_NAME, default_template_path
     tmpl = None
     slots_per_page = 9
-    if output_format == "png" and not template:
-        # The default 3x3 renderer only speaks PDF; without this guard it
+    template_path = Path(template).resolve() if template else default_template_path()
+
+    if output_format == "png" and template_path is None:
+        # The built-in 3x3 renderer only speaks PDF; without this guard it
         # writes PDF bytes into files named .png.
-        click.echo("Error: --format png requires --template "
-                   "(the default 3x3 layout only outputs PDF)", err=True)
+        click.echo(f"Error: --format png requires a template, and the default "
+                   f"({DEFAULT_TEMPLATE_NAME}) isn't installed — pass --template "
+                   "(the built-in 3x3 fallback only outputs PDF)", err=True)
         sys.exit(1)
-    if template:
+
+    if template_path:
         from .template import parse_template as parse_template_file
-        tmpl = parse_template_file(Path(template).resolve())
+        tmpl = parse_template_file(template_path)
         slots_per_page = tmpl.slots_per_page
-        click.echo(f"Template: {tmpl.path} ({slots_per_page} slots, "
+        click.echo(f"Template: {tmpl.path}{'' if template else ' (default)'} "
+                   f"({slots_per_page} slots, "
                    f"{tmpl.page_width}x{tmpl.page_height} @ {tmpl.dpi} DPI "
                    f"= {tmpl.page_width / tmpl.dpi:g}x{tmpl.page_height / tmpl.dpi:g} in)")
+    else:
+        click.echo(f"Template: none ({DEFAULT_TEMPLATE_NAME} not installed) "
+                   "— using built-in 3x3 grid")
 
     result = pack_items(items, scoring=dims, slots_per_page=slots_per_page)
 
